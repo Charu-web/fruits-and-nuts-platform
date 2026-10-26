@@ -4,6 +4,8 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { getRequestId } from "@/lib/request-context";
 import { logger } from "@/lib/logger";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Health & Readiness Check Endpoint
  * GET /api/health

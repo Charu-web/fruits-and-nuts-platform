@@ -39,16 +39,22 @@ function validateEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
 
   if (!parsed.success) {
+    const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build" || process.env.CI === "1";
     const sanitizedIssues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
-    console.error("❌ CRITICAL: Invalid environment variable configuration:", sanitizedIssues);
-    if (process.env.NODE_ENV === "production") {
+    
+    if (process.env.NODE_ENV === "production" && !isBuildPhase) {
+      console.error("❌ CRITICAL: Invalid environment variable configuration:", sanitizedIssues);
       throw new Error("Failed to initialize server due to invalid environment variables.");
     }
-    // Return safe defaults for local dev bootstrap
+
+    if (process.env.NODE_ENV === "production" && isBuildPhase) {
+      console.warn("⚠️ BUILD PHASE: Environment variables missing during build collection, using safe build-time defaults:", sanitizedIssues);
+    }
+    // Return safe defaults for build time or local dev bootstrap
     return {
-      NODE_ENV: "development",
+      NODE_ENV: process.env.NODE_ENV === "production" ? "production" : "development",
       PORT: 3000,
-      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
       DATABASE_URL: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/fruits_and_nuts?schema=public",
       DIRECT_URL: process.env.DIRECT_URL,
       REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",

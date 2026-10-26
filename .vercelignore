@@ -1,0 +1,28 @@
+# Vercel Deployment Ignore Specification
+# Excludes local archives, secrets, and personal documents from Vercel CLI deployments
+
+# Environment Files & Secrets
+.env*
+!.env.example
+*.pem
+*.key
+*.pub
+
+# Large Archives & Deployment Tarballs
+*.tar.gz
+*.tar
+*.zip
+deploy_fruitsandnuts.tar.gz
+
+# Personal Documents
+Charu_Sonker_*
+generate_resume.py
+WhatsApp Image*
+
+# Local Scratch & Build Caches
+scratch/
+tmp/
+temp/
+.next/
+node_modules/
+*.tsbuildinfo
