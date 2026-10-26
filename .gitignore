@@ -1,0 +1,54 @@
+# Dependencies
+node_modules
+/.pnp
+.pnp.js
+
+# Next.js Build Output
+.next/
+out/
+
+# Environment Files (Do not commit secrets)
+.env*
+.env
+.env*.local
+!.env.example
+
+# Security & Private Key Files
+*.pem
+*.key
+*.pub
+id_rsa*
+id_ed25519*
+
+# Deployment Archives & Large Backups
+*.tar.gz
+*.tar
+*.zip
+deploy_fruitsandnuts.tar.gz
+
+# Vercel Deployment & Build Cache
+.vercel/
+
+# Debug Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS Files
+.DS_Store
+
+# Temporary & Scratch Files
+tmp/
+temp/
+scratch/
+WhatsApp Image 2026-10-14 at 00.41.44 1.jpeg
+
+# Personal Documents (Excluded from public release)
+Charu_Sonker_*
+generate_resume.py
+
+# TypeScript Cache
+*.tsbuildinfo
+next-env.d.ts

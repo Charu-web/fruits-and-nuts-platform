@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="45%" r="75%">
+      <stop offset="0%" stop-color="#FCFAF6"/>
+      <stop offset="65%" stop-color="#F5EFE3"/>
+      <stop offset="100%" stop-color="#ECE3D0"/>
+    </radialGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D4B776"/>
+      <stop offset="50%" stop-color="#B99A58"/>
+      <stop offset="100%" stop-color="#987B3E"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#102C21" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- Luxury Parchment Background -->
+  <rect width="800" height="800" fill="url(#bgGrad)"/>
+
+  <!-- Ornate Outer & Inner Gold Hairline Frames -->
+  <rect x="36" y="36" width="728" height="728" rx="16" fill="none" stroke="#B99A58" stroke-width="1.5" stroke-opacity="0.4"/>
+  <rect x="46" y="46" width="708" height="708" rx="12" fill="none" stroke="#B99A58" stroke-width="1" stroke-opacity="0.25"/>
+
+  <!-- Corner Flourishes -->
+  <path d="M 36 68 L 68 68 L 68 36" fill="none" stroke="url(#goldGrad)" stroke-width="2.5"/>
+  <path d="M 764 68 L 732 68 L 732 36" fill="none" stroke="url(#goldGrad)" stroke-width="2.5"/>
+  <path d="M 36 732 L 68 732 L 68 764" fill="none" stroke="url(#goldGrad)" stroke-width="2.5"/>
+  <path d="M 764 732 L 732 732 L 732 764" fill="none" stroke="url(#goldGrad)" stroke-width="2.5"/>
+
+  <!-- Top Category Eyebrow Pill -->
+  <g transform="translate(400, 110)">
+    <rect x="-240" y="-18" width="480" height="36" rx="18" fill="#102C21" fill-opacity="0.06" stroke="#B99A58" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="0" y="5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" fill="#987B3E" text-anchor="middle" letter-spacing="3">LUXURY GIFTING • ARTISANAL BYOB CASKET</text>
+  </g>
+
+  <!-- Central Royal Monogram Crest -->
+  <g filter="url(#shadow)">
+    <circle cx="400" cy="245" r="62" fill="#102C21" stroke="url(#goldGrad)" stroke-width="3"/>
+    <circle cx="400" cy="245" r="54" fill="none" stroke="url(#goldGrad)" stroke-width="1.2" stroke-dasharray="4,3" stroke-opacity="0.8"/>
+    <text x="400" y="258" font-family="'Cinzel', Georgia, serif" font-size="38" font-weight="bold" fill="#D4B776" text-anchor="middle" letter-spacing="2">FN</text>
+  </g>
+
+  <!-- Brand Typography -->
+  <text x="400" y="360" font-family="'Cinzel', Georgia, serif" font-size="24" font-weight="700" fill="#102C21" text-anchor="middle" letter-spacing="6">FRUITS &amp; NUTS</text>
+  <text x="400" y="388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#987B3E" text-anchor="middle" letter-spacing="4">ROYAL GOURMET RESERVE</text>
+
+  <!-- Delicate Gold Divider with Center Diamond -->
+  <g transform="translate(400, 420)">
+    <line x1="-140" y1="0" x2="-15" y2="0" stroke="url(#goldGrad)" stroke-width="1.2"/>
+    <polygon points="0,-4 4,0 0,4 -4,0" fill="#B99A58"/>
+    <line x1="15" y1="0" x2="140" y2="0" stroke="url(#goldGrad)" stroke-width="1.2"/>
+  </g>
+
+  <!-- Product Name (Hero Element) -->
+  <text x="400" y="480" font-family="'Cinzel', 'Playfair Display', Georgia, serif" font-size="26" font-weight="700" fill="#102C21" text-anchor="middle" letter-spacing="3">FRUITS &amp; NUTS ROYAL</text>
+    <text x="400" y="520" font-family="'Cinzel', 'Playfair Display', Georgia, serif" font-size="26" font-weight="700" fill="#102C21" text-anchor="middle" letter-spacing="3">IMPERIAL HAMPER BOX</text>
+
+  <!-- Bottom Authenticity Seal -->
+  <g transform="translate(400, 680)">
+    <rect x="-180" y="-16" width="360" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.85" stroke="#B99A58" stroke-width="1" stroke-opacity="0.5"/>
+    <text x="0" y="4" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#6B7267" text-anchor="middle" letter-spacing="2">ESTATE HARVEST • PURITY GRADE A+</text>
+  </g>
+</svg>

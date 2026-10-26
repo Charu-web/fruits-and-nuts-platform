@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#FAF7F0"/>
+      <stop offset="100%" stop-color="#EFE8D8"/>
+    </radialGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D4B776"/>
+      <stop offset="50%" stop-color="#B99A58"/>
+      <stop offset="100%" stop-color="#987B3E"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="800" fill="url(#bgGrad)"/>
+
+  <!-- Ornate Border Frame -->
+  <rect x="40" y="40" width="720" height="720" rx="20" fill="none" stroke="#E5DEC9" stroke-width="2"/>
+  <rect x="52" y="52" width="696" height="696" rx="14" fill="none" stroke="url(#goldGrad)" stroke-width="1.5" stroke-opacity="0.6"/>
+
+  <!-- Corner Flourishes -->
+  <path d="M 40 70 L 70 70 L 70 40" fill="none" stroke="url(#goldGrad)" stroke-width="2.5"/>
+  <path d="M 760 70 L 730 70 L 730 40" fill="none" stroke="url(#goldGrad)" stroke-width="2.5"/>
+  <path d="M 40 730 L 70 730 L 70 760" fill="none" stroke="url(#goldGrad)" stroke-width="2.5"/>
+  <path d="M 760 730 L 730 730 L 730 760" fill="none" stroke="url(#goldGrad)" stroke-width="2.5"/>
+
+  <!-- Top Terroir Header -->
+  <text x="400" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#987B3E" text-anchor="middle" letter-spacing="4">SINGLE-ORIGIN ESTATE HARVEST</text>
+
+  <!-- Central Refined Royal Crest -->
+  <circle cx="400" cy="340" r="56" fill="#102C21" stroke="url(#goldGrad)" stroke-width="3"/>
+  <circle cx="400" cy="340" r="48" fill="none" stroke="url(#goldGrad)" stroke-width="1.2" stroke-dasharray="4,3" stroke-opacity="0.8"/>
+  <text x="400" y="352" font-family="Cinzel, Georgia, serif" font-size="34" font-weight="bold" fill="#D4B776" text-anchor="middle" letter-spacing="2">FN</text>
+
+  <!-- Brand Typography -->
+  <text x="400" y="460" font-family="Cinzel, Georgia, serif" font-size="34" font-weight="bold" fill="#102C21" text-anchor="middle" letter-spacing="5">M/S FRUITS &amp; NUTS</text>
+  <line x1="280" y1="485" x2="520" y2="485" stroke="url(#goldGrad)" stroke-width="1.5"/>
+  <circle cx="400" cy="485" r="4" fill="#B99A58"/>
+  <text x="400" y="525" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="700" fill="#987B3E" text-anchor="middle" letter-spacing="5">ROYAL GOURMET RESERVE</text>
+  <text x="400" y="560" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="500" fill="#6B7267" text-anchor="middle" letter-spacing="2">100% PURE TERROIR SELECTION • GRADE A+</text>
+</svg>
