@@ -80,9 +80,13 @@ export function apiError(error: unknown, requestId?: string): NextResponse<ApiEr
 
   console.error(`[API Internal Error] [${requestId}]:`, error);
 
-  // Handle generic / unexpected internal errors (sanitized for production)
-  const isDev = process.env.NODE_ENV === "development";
-  const errorMessage = isDev && error instanceof Error ? error.message : "An unexpected internal server error occurred.";
+  // Handle generic / unexpected internal errors
+  const errorMessage =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+      ? error
+      : "An unexpected internal server error occurred.";
 
   return NextResponse.json(
     {
