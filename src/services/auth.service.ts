@@ -9,6 +9,8 @@ import {
   generateSessionToken,
   generateSecureRandomToken,
   hashOpaqueToken,
+  generatePasswordResetToken,
+  verifyPasswordResetToken,
   SessionUser,
   logAuthEvent,
   isAdminRole,
@@ -237,9 +239,26 @@ function normalizeIndianPhone(phone?: string | null): string | null {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, "");
   if (!digits) return null;
+  if (digits.length === 13 && digits.startsWith("0091")) return digits.slice(4);
   if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
   if (digits.length === 11 && digits.startsWith("0")) return digits.slice(1);
   return digits;
+}
+
+function resolveAppOrigin(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim() !== "") {
+    return process.env.NEXT_PUBLIC_APP_URL.trim().replace(/\/$/, "");
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.trim().replace(/\/$/, "")}`;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.trim().replace(/\/$/, "")}`;
+  }
+  if (process.env.NODE_ENV === "production") {
+    return "https://fruits-and-nuts-platform.vercel.app";
+  }
+  return "http://localhost:3000";
 }
 
 export interface LoginInput {
@@ -304,7 +323,7 @@ export class AuthService {
 
     // 2. Duplicate account verification
     const orConditions = [
-      ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+      ...(normalizedEmail ? [{ email: { equals: normalizedEmail, mode: "insensitive" as const } }] : []),
       ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
     ];
 
@@ -455,7 +474,7 @@ export class AuthService {
     }
 
     const orConditions = [
-      ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+      ...(normalizedEmail ? [{ email: { equals: normalizedEmail, mode: "insensitive" as const } }] : []),
       ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
     ];
 
@@ -600,6 +619,7 @@ export class AuthService {
    */
   static async adminLogin(input: AdminLoginInput): Promise<AdminLoginResult> {
     const normalizedEmail = input.email?.trim().toLowerCase();
+    const normalizedPhone = normalizeIndianPhone(input.phone);
 
     // 1. Locate user record
     let user: any = null;
@@ -607,8 +627,8 @@ export class AuthService {
       user = await db.user.findFirst({
         where: {
           OR: [
-            ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-            ...(input.phone ? [{ phone: input.phone.trim() }] : []),
+            ...(normalizedEmail ? [{ email: { equals: normalizedEmail, mode: "insensitive" as const } }] : []),
+            ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
           ],
         },
         include: {
@@ -621,7 +641,7 @@ export class AuthService {
       user = DEV_USERS.find(
         (u) =>
           (normalizedEmail && u.email?.toLowerCase() === normalizedEmail) ||
-          (input.phone && u.phone === input.phone.trim())
+          (normalizedPhone && u.phone === normalizedPhone)
       ) || null;
     }
 
@@ -630,7 +650,7 @@ export class AuthService {
       user = DEV_USERS.find(
         (u) =>
           (normalizedEmail && u.email?.toLowerCase() === normalizedEmail) ||
-          (input.phone && u.phone === input.phone.trim())
+          (normalizedPhone && u.phone === normalizedPhone)
       ) || null;
     }
 
@@ -836,7 +856,7 @@ export class AuthService {
       const dbUser = await db.user.findFirst({
         where: {
           OR: [
-            ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+            ...(normalizedEmail ? [{ email: { equals: normalizedEmail, mode: "insensitive" as const } }] : []),
             ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
           ],
         },
@@ -918,11 +938,19 @@ export class AuthService {
     let generatedToken: string | undefined = undefined;
 
     if (user && user.isActive) {
-      generatedToken = generateSecureRandomToken(32);
+      try {
+        generatedToken = await generatePasswordResetToken({
+          userId: user.id,
+          email: user.email,
+          passwordHash: user.passwordHash,
+        });
+      } catch {
+        generatedToken = generateSecureRandomToken(32);
+      }
       const hashedToken = hashOpaqueToken(generatedToken);
       const tokenHashPrefix = `${hashedToken.substring(0, 8)}...`;
 
-      // Invalidate existing active reset tokens for this user
+      // Invalidate existing active reset tokens for this user in dev cache
       for (const [hash, record] of RESET_TOKENS.entries()) {
         if (record.userId === user.id) {
           RESET_TOKENS.delete(hash);
@@ -941,10 +969,9 @@ export class AuthService {
       });
       saveDevAuthToDisk();
 
-      const appOrigin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-      const cleanOrigin = appOrigin.replace(/\/$/, "");
-      const resetUrl = `${cleanOrigin}/reset-password?token=${generatedToken}`;
-      const redactedResetEndpoint = `${cleanOrigin}/reset-password?token=[REDACTED]`;
+      const appOrigin = resolveAppOrigin();
+      const resetUrl = `${appOrigin}/reset-password?token=${generatedToken}`;
+      const redactedResetEndpoint = `${appOrigin}/reset-password?token=[REDACTED]`;
 
       // Dispatch real password-reset email via configured provider
       if (user.email) {
@@ -1010,6 +1037,104 @@ export class AuthService {
       throw AppError.validation("Invalid or expired password reset token.");
     }
 
+    // Hash new password using bcrypt (12 salt rounds)
+    const newPasswordHash = await hashPassword(newPassword);
+
+    // 1. Try stateless signed JWT verification (primary path for serverless production)
+    const jwtPayload = await verifyPasswordResetToken(cleanToken);
+    if (jwtPayload) {
+      let userRecord: any = null;
+      try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jwtPayload.userId);
+        if (isUuid) {
+          userRecord = await db.user.findUnique({ where: { id: jwtPayload.userId } });
+        } else if (jwtPayload.email) {
+          userRecord = await db.user.findFirst({
+            where: { email: { equals: jwtPayload.email.trim().toLowerCase(), mode: "insensitive" } },
+          });
+        }
+      } catch (dbErr: any) {
+        console.warn("[AuthService:ResetPassword] Database lookup failed, checking DEV_USERS:", dbErr.message);
+      }
+
+      if (!userRecord) {
+        syncDevAuthFromDisk();
+        userRecord = DEV_USERS.find(
+          (u) =>
+            u.id === jwtPayload.userId ||
+            (jwtPayload.email && u.email?.toLowerCase() === jwtPayload.email.toLowerCase())
+        );
+      }
+
+      if (!userRecord || !userRecord.isActive) {
+        throw AppError.validation("Invalid or expired password reset token.");
+      }
+
+      // Single-use guarantee: verify password has not already been changed since token issuance
+      const currentPwh = userRecord.passwordHash ? userRecord.passwordHash.slice(-16) : "";
+      if (jwtPayload.pwh && currentPwh !== jwtPayload.pwh) {
+        throw AppError.validation("This password reset token has already been used. Please request a new one.");
+      }
+
+      // Update in database
+      let dbUpdated = false;
+      try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userRecord.id);
+        if (isUuid) {
+          await db.user.update({
+            where: { id: userRecord.id },
+            data: { passwordHash: newPasswordHash },
+          });
+          dbUpdated = true;
+        } else if (userRecord.email) {
+          const found = await db.user.findFirst({
+            where: { email: { equals: userRecord.email.trim().toLowerCase(), mode: "insensitive" } },
+          });
+          if (found) {
+            await db.user.update({
+              where: { id: found.id },
+              data: { passwordHash: newPasswordHash },
+            });
+            dbUpdated = true;
+          }
+        }
+      } catch (updateErr: any) {
+        console.error(`[AuthService:ResetPassword] DB update error: ${updateErr?.message}`);
+      }
+
+      // Update in DEV_USERS in-memory registry and persist to disk
+      syncDevAuthFromDisk();
+      const devUser = DEV_USERS.find(
+        (u) =>
+          u.id === userRecord.id ||
+          (userRecord.email && u.email?.toLowerCase() === userRecord.email.toLowerCase())
+      );
+      if (devUser) {
+        devUser.passwordHash = newPasswordHash;
+      }
+      saveDevAuthToDisk();
+
+      console.log(
+        `[AuthService:ResetPassword] Password successfully updated for user=${userRecord.id} (${maskEmailForLog(
+          userRecord.email || jwtPayload.userId
+        )}, dbUpdated=${dbUpdated})`
+      );
+
+      try {
+        await logAuthEvent("PASSWORD_RESET_REQUESTED", {
+          actorId: userRecord.id,
+          targetId: userRecord.id,
+          ipAddress,
+          metadata: { action: "PASSWORD_RESET_SUCCESS", method: "JWT_STATELESS" },
+        });
+      } catch {}
+
+      return {
+        message: "Password has been successfully updated. You may now sign in with your new credentials.",
+      };
+    }
+
+    // 2. Fallback to opaque token in dev/in-memory registry (for backward compatibility and test runner)
     syncDevAuthFromDisk();
 
     const hashedToken = hashOpaqueToken(cleanToken);
@@ -1037,9 +1162,6 @@ export class AuthService {
       throw AppError.validation("Password reset token has expired. Please request a new one.");
     }
 
-    // Hash new password using bcrypt (12 salt rounds)
-    const newPasswordHash = await hashPassword(newPassword);
-
     // Update in database
     try {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(record.userId);
@@ -1048,8 +1170,20 @@ export class AuthService {
           where: { id: record.userId },
           data: { passwordHash: newPasswordHash },
         });
+      } else if (record.identifier && record.identifier.includes("@")) {
+        const found = await db.user.findFirst({
+          where: { email: { equals: record.identifier.trim().toLowerCase(), mode: "insensitive" } },
+        });
+        if (found) {
+          await db.user.update({
+            where: { id: found.id },
+            data: { passwordHash: newPasswordHash },
+          });
+        }
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn("[AuthService:ResetPassword] DB update error:", e.message);
+    }
 
     // Update in DEV_USERS in-memory registry and persist to disk
     const devUser = DEV_USERS.find(
@@ -1075,7 +1209,7 @@ export class AuthService {
         actorId: record.userId,
         targetId: record.userId,
         ipAddress,
-        metadata: { action: "PASSWORD_RESET_SUCCESS" },
+        metadata: { action: "PASSWORD_RESET_SUCCESS", method: "OPAQUE_TOKEN" },
       });
     } catch {}
 

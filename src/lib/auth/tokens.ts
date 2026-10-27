@@ -70,3 +70,61 @@ export function generateSecureRandomToken(bytes = 32): string {
 export function hashOpaqueToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
+
+export interface PasswordResetPayload {
+  userId: string;
+  email: string | null;
+  pwh: string;
+  purpose: "password_reset";
+}
+
+/**
+ * Generates a signed, stateless, time-limited JWT reset token.
+ * Contains a slice of the active password hash so the token is automatically
+ * invalidated once the password has been reset (single-use guarantee across serverless containers).
+ */
+export async function generatePasswordResetToken(params: {
+  userId: string;
+  email: string | null;
+  passwordHash?: string | null;
+}): Promise<string> {
+  const pwh = params.passwordHash ? params.passwordHash.slice(-16) : "";
+  return await new SignJWT({
+    userId: params.userId,
+    email: params.email,
+    pwh,
+    purpose: "password_reset",
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("15m")
+    .sign(secretKey);
+}
+
+/**
+ * Verifies and decodes a signed password reset JWT token.
+ * Returns null if the token has expired, has been tampered with, or is not a reset token.
+ */
+export async function verifyPasswordResetToken(token: string): Promise<{
+  userId: string;
+  email: string | null;
+  pwh: string;
+} | null> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey, {
+      algorithms: ["HS256"],
+    });
+
+    if (payload.purpose !== "password_reset") {
+      return null;
+    }
+
+    return {
+      userId: payload.userId as string,
+      email: (payload.email as string) || null,
+      pwh: (payload.pwh as string) || "",
+    };
+  } catch {
+    return null;
+  }
+}

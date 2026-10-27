@@ -877,12 +877,14 @@ export class OrderService {
           });
         }
 
-        NotificationService.sendCodOrderConfirmationEmail(order).catch((e) =>
-          console.warn("[OrderService] Customer COD email skipped/failed:", e.message)
-        );
-        NotificationService.sendAdminNewOrderNotification(order).catch((e) =>
-          console.warn("[OrderService] Admin COD notification skipped/failed:", e.message)
-        );
+        if (paymentMethod === "COD") {
+          NotificationService.sendOrderConfirmationEmail(order).catch((e) =>
+            console.warn("[OrderService] Customer COD email skipped/failed:", e.message)
+          );
+          NotificationService.sendAdminNewOrderNotification(order).catch((e) =>
+            console.warn("[OrderService] Admin COD notification skipped/failed:", e.message)
+          );
+        }
 
         try {
           syncDevOrdersFromDisk();
@@ -1041,7 +1043,7 @@ export class OrderService {
       DEV_ORDERS.unshift(devOrder);
       saveDevOrdersToDisk();
       if (paymentMethod === "COD") {
-        NotificationService.sendCodOrderConfirmationEmail(devOrder).catch((e) =>
+        NotificationService.sendOrderConfirmationEmail(devOrder).catch((e) =>
           console.warn("[OrderService] Customer COD email skipped/failed:", e.message)
         );
         NotificationService.sendAdminNewOrderNotification(devOrder).catch((e) =>

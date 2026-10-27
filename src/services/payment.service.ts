@@ -3,6 +3,7 @@ import { AppError } from "@/lib/errors";
 import { runTransaction } from "@/database/transactions";
 import { PaymentProviderFactory } from "@/lib/payment/payment-factory";
 import { RefundService } from "./refund.service";
+import { NotificationService } from "./notification.service";
 import {
   CreateGatewayOrderSchema,
   VerifyPaymentSchema,
@@ -185,13 +186,21 @@ export class PaymentService {
         createdAt: new Date(),
         reason: `Online payment authorized and verified (Payment ID: ${razorpayPaymentId})`,
       });
+
+      NotificationService.sendOrderConfirmationEmail(order).catch((e) =>
+        console.warn("[PaymentService] Customer payment confirmation email skipped/failed:", e.message)
+      );
+      NotificationService.sendAdminNewOrderNotification(order).catch((e) =>
+        console.warn("[PaymentService] Admin payment alert skipped/failed:", e.message)
+      );
+
       return {
         message: "Payment verified successfully.",
         order,
       };
     }
 
-    return await runTransaction(async (tx) => {
+    const verificationResult = await runTransaction(async (tx) => {
       // 1. Update Payment record
       const existingPayment = await tx.payment.findFirst({
         where: { orderId: order.id, providerOrderId: razorpayOrderId },
@@ -266,6 +275,21 @@ export class PaymentService {
         order: updatedOrder,
       };
     });
+
+    const fullConfirmedOrder = {
+      ...order,
+      ...verificationResult.order,
+      items: order.items,
+    };
+
+    NotificationService.sendOrderConfirmationEmail(fullConfirmedOrder).catch((e) =>
+      console.warn("[PaymentService] Customer payment confirmation email skipped/failed:", e.message)
+    );
+    NotificationService.sendAdminNewOrderNotification(fullConfirmedOrder).catch((e) =>
+      console.warn("[PaymentService] Admin payment alert skipped/failed:", e.message)
+    );
+
+    return verificationResult;
   }
 
   /**
@@ -400,6 +424,18 @@ export class PaymentService {
                 reason: `Payment confirmed via webhook (${event.eventType}: ${event.providerPaymentId})`,
               },
             });
+
+            const fullConfirmedOrder = {
+              ...order,
+              orderStatus: OrderStatus.CONFIRMED,
+              paymentStatus: PaymentStatus.PAID,
+            };
+            NotificationService.sendOrderConfirmationEmail(fullConfirmedOrder).catch((e) =>
+              console.warn("[PaymentService:Webhook] Customer confirmation email skipped/failed:", e.message)
+            );
+            NotificationService.sendAdminNewOrderNotification(fullConfirmedOrder).catch((e) =>
+              console.warn("[PaymentService:Webhook] Admin alert skipped/failed:", e.message)
+            );
           } else if (order.orderStatus === OrderStatus.CANCELLED) {
             // Late Payment Handler (Hold expired before webhook arrived)
             let allItemsAvailable = true;

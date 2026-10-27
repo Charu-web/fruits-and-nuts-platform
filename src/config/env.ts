@@ -4,7 +4,7 @@ import "dotenv/config";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
-  NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  NEXT_PUBLIC_APP_URL: z.string().url().default("https://fruits-and-nuts-platform.vercel.app"),
 
   // Database Connection
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
@@ -54,7 +54,13 @@ function validateEnv(): Env {
     return {
       NODE_ENV: process.env.NODE_ENV === "production" ? "production" : "development",
       PORT: 3000,
-      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+      NEXT_PUBLIC_APP_URL:
+        process.env.NEXT_PUBLIC_APP_URL ||
+        (process.env.VERCEL_PROJECT_PRODUCTION_URL
+          ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+          : process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : "https://fruits-and-nuts-platform.vercel.app"),
       DATABASE_URL: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/fruits_and_nuts?schema=public",
       DIRECT_URL: process.env.DIRECT_URL,
       REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",

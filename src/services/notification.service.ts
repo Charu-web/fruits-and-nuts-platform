@@ -708,28 +708,51 @@ Please do not share this code with anyone.
   /**
    * Dispatches branded Cash on Delivery order confirmation email to customer.
    */
-  static async sendCodOrderConfirmationEmail(
+  static async sendOrderConfirmationEmail(
     order: any
   ): Promise<{ sent: boolean; provider: string; reason?: string }> {
-    const customerEmail = order.customerEmail;
+    const customerEmail =
+      order.customerEmail ||
+      order.user?.email ||
+      order.shippingRecipientEmail ||
+      order.shippingEmail;
+
     if (!customerEmail || !customerEmail.includes("@")) {
-      return { sent: false, provider: "NO_EMAIL", reason: "Customer email not provided" };
+      return { sent: false, provider: "NO_EMAIL", reason: "Customer email not provided or invalid" };
     }
+
+    const isCod = order.paymentMethod === "COD";
+    const paymentLabel = isCod ? "Cash on Delivery" : "Online Payment (Prepaid)";
+    const paymentInstruction = isCod
+      ? "&bull; Please keep exact cash or UPI QR scanner ready for our logistics delivery partner."
+      : "&bull; Payment successfully received via online payment gateway. No amount due at delivery.";
+    const totalHeaderLabel = isCod ? "Total Payable on Delivery (COD)" : "Total Amount Paid";
+    const statusBadge = isCod ? "Cash on Delivery Order Confirmed" : "Order & Payment Confirmed";
 
     const itemsListHtml = (order.items || [])
       .map(
         (item: any) =>
           `<tr>
-            <td style="padding:8px 0; border-bottom:1px solid #E5DEC9; font-size:13px; color:#173D2C;">
+            <td style="padding:10px 0; border-bottom:1px solid #E5DEC9; font-size:13px; color:#173D2C;">
               <strong>${item.productNameSnapshot || item.variant?.product?.name || "Harvest Item"}</strong>
               <div style="font-size:11px; color:#78716C;">Qty: ${item.quantity} &bull; ${item.weightGramsSnapshot || 500}g</div>
             </td>
-            <td align="right" style="padding:8px 0; border-bottom:1px solid #E5DEC9; font-size:13px; font-weight:bold; color:#173D2C;">
+            <td align="right" style="padding:10px 0; border-bottom:1px solid #E5DEC9; font-size:13px; font-weight:bold; color:#173D2C;">
               ₹${Number(item.lineTotalSnapshot || item.totalPrice || 0).toLocaleString("en-IN")}
             </td>
           </tr>`
       )
       .join("");
+
+    const shippingAddressFormatted = [
+      order.shippingRecipientName || order.customerName,
+      order.shippingAddressLine1,
+      order.shippingAddressLine2,
+      [order.shippingCity, order.shippingState].filter(Boolean).join(", "),
+      order.shippingPostalCode,
+    ]
+      .filter(Boolean)
+      .join("<br>");
 
     const htmlBody = `
 <!DOCTYPE html>
@@ -748,7 +771,7 @@ Please do not share this code with anyone.
             <td align="center" style="padding-bottom:20px;">
               <div style="font-size:24px; font-weight:bold; letter-spacing:2px; color:#173D2C;">FRUITS &amp; NUTS</div>
               <div style="font-size:10px; letter-spacing:3px; color:#B89453; text-transform:uppercase; margin-top:4px; font-family:sans-serif; font-weight:700;">
-                Cash on Delivery Order Confirmed
+                ${statusBadge}
               </div>
             </td>
           </tr>
@@ -758,13 +781,13 @@ Please do not share this code with anyone.
                 Thank You For Your Order!
               </h1>
               <p style="font-size:13px; line-height:1.6; color:#57534E; font-family:sans-serif;">
-                Your Cash on Delivery order <strong>#${order.orderNumber}</strong> has been confirmed. Our team is vacuum-packing your fresh harvest for express dispatch.
+                Your order <strong>#${order.orderNumber}</strong> (${paymentLabel}) has been confirmed. Our team is vacuum-packing your fresh harvest for express dispatch.
               </p>
               
               <div style="background-color:#FAF7F0; border:1px solid #E5DEC9; border-radius:12px; padding:16px; margin:20px 0; font-family:sans-serif;">
-                <div style="font-size:12px; color:#78716C; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">Total Payable on Delivery (COD)</div>
+                <div style="font-size:12px; color:#78716C; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">${totalHeaderLabel}</div>
                 <div style="font-size:26px; font-weight:bold; color:#173D2C; margin-top:4px;">₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}</div>
-                <div style="font-size:11px; color:#8C733E; margin-top:4px;">&bull; Please keep exact cash or UPI QR scanner ready for our logistics delivery partner.</div>
+                <div style="font-size:11px; color:#8C733E; margin-top:4px;">${paymentInstruction}</div>
               </div>
 
               <h3 style="font-size:14px; font-weight:bold; color:#173D2C; margin:20px 0 10px 0; font-family:sans-serif; text-transform:uppercase; letter-spacing:1px;">
@@ -776,9 +799,8 @@ Please do not share this code with anyone.
 
               <div style="font-size:12px; line-height:1.6; color:#57534E; font-family:sans-serif; background-color:#FAF7F0; padding:14px; border-radius:12px; border:1px solid #E5DEC9;">
                 <strong>Shipping Destination:</strong><br>
-                ${order.shippingRecipientName || order.customerName}<br>
-                ${order.shippingAddressLine1 || ""}, ${order.shippingCity || ""} &mdash; ${order.shippingPostalCode || ""}<br>
-                Contact: ${order.shippingPhone || order.customerPhone || ""}
+                ${shippingAddressFormatted}<br>
+                Contact: ${order.shippingPhone || order.customerPhone || "N/A"}
               </div>
 
               <p style="font-size:11px; color:#A8A29E; margin:24px 0 0 0; font-family:sans-serif; text-align:center; border-top:1px solid #DCE5D8; padding-top:16px;">
@@ -794,25 +816,45 @@ Please do not share this code with anyone.
 </html>
     `.trim();
 
+    const textItems = (order.items || [])
+      .map(
+        (item: any) =>
+          `- ${item.productNameSnapshot || item.variant?.product?.name || "Harvest Item"} x${item.quantity} (${item.weightGramsSnapshot || 500}g): ₹${Number(item.lineTotalSnapshot || item.totalPrice || 0).toLocaleString("en-IN")}`
+      )
+      .join("\n");
+
     const textBody = `
-FRUITS & NUTS — Cash on Delivery Order Confirmed
-Order #${order.orderNumber}
+FRUITS & NUTS — ORDER CONFIRMATION
+Order #${order.orderNumber} (${paymentLabel})
 
 Thank you for your order!
-Total Payable on Delivery (COD): ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}
+${totalHeaderLabel}: ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}
 Recipient: ${order.shippingRecipientName || order.customerName}
 Delivery Address: ${order.shippingAddressLine1 || ""}, ${order.shippingCity || ""} - ${order.shippingPostalCode || ""}
 
-Our team is vacuum-packing your fresh harvest for dispatch.
+Ordered Items:
+${textItems}
+
+Our team is vacuum-packing your fresh harvest for express dispatch.
+Concierge: +91-8368301495 | fruitsnutswebsite@gmail.com
     `.trim();
 
     return this.dispatchEmail({
       to: customerEmail,
-      subject: `Order Confirmed: #${order.orderNumber} (Cash on Delivery)`,
+      subject: `Order Confirmed: #${order.orderNumber} (${isCod ? "Cash on Delivery" : "Payment Received"})`,
       html: htmlBody,
       text: textBody,
-      emailType: "COD_ORDER_CONFIRMATION",
+      emailType: isCod ? "COD_ORDER_CONFIRMATION" : "ONLINE_ORDER_CONFIRMATION",
     });
+  }
+
+  /**
+   * Backwards-compatible wrapper for Cash on Delivery confirmation.
+   */
+  static async sendCodOrderConfirmationEmail(
+    order: any
+  ): Promise<{ sent: boolean; provider: string; reason?: string }> {
+    return this.sendOrderConfirmationEmail(order);
   }
 
   /**
@@ -822,7 +864,17 @@ Our team is vacuum-packing your fresh harvest for dispatch.
     order: any
   ): Promise<{ sent: boolean; provider: string; reason?: string }> {
     const adminEmail = process.env.ADMIN_EMAIL?.trim() || "fruitsnutswebsite@gmail.com";
-    const appOrigin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appOrigin =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "https://fruits-and-nuts-platform.vercel.app");
+
+    const isCod = order.paymentMethod === "COD";
+    const paymentLabel = isCod ? "Cash on Delivery (COD)" : "Online Payment (Prepaid)";
+    const subjectPrefix = isCod ? "New COD Order" : "New Paid Online Order";
 
     const htmlBody = `
 <!DOCTYPE html>
@@ -835,16 +887,17 @@ Our team is vacuum-packing your fresh harvest for dispatch.
 <body style="margin:0; padding:0; background-color:#FAF7F0; font-family:'Georgia', serif; color:#1C1917;">
   <div style="padding:30px 16px;">
     <div style="max-width:540px; width:100%; box-sizing:border-box; margin:0 auto; background-color:#FFFFFF; border:1px solid #DCE5D8; border-radius:16px; padding:24px; font-family:sans-serif;">
-      <h2 style="color:#173D2C; margin-top:0;">New COD Order: #${order.orderNumber}</h2>
+      <h2 style="color:#173D2C; margin-top:0;">${subjectPrefix}: #${order.orderNumber}</h2>
       <p style="font-size:14px; color:#4A4E46;">
-        A new Cash on Delivery order has been placed on the Fruits &amp; Nuts storefront.
+        A new ${isCod ? "Cash on Delivery" : "prepaid online"} order has been placed on the Fruits &amp; Nuts storefront.
       </p>
       <div style="background-color:#FAF7F0; padding:12px 16px; border-radius:8px; margin:16px 0; font-size:13px; line-height:1.6;">
         <strong>Payable Amount:</strong> ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}<br>
+        <strong>Payment Method:</strong> ${paymentLabel} (Status: ${order.paymentStatus || (isCod ? "PENDING" : "PAID")})<br>
         <strong>Customer:</strong> ${order.customerName || order.shippingRecipientName}<br>
         <strong>Phone:</strong> ${order.shippingPhone || order.customerPhone || "N/A"}<br>
         <strong>Destination:</strong> ${order.shippingCity || ""}, ${order.shippingState || ""} (${order.shippingPostalCode || ""})<br>
-        <strong>Status:</strong> ${order.orderStatus} (Payment: ${order.paymentStatus})
+        <strong>Status:</strong> ${order.orderStatus}
       </div>
       <div style="text-align:center; margin-top:20px;">
         <a href="${appOrigin}/admin/orders" style="background-color:#173D2C; color:#FFFFFF; padding:10px 20px; border-radius:8px; font-size:12px; font-weight:bold; text-decoration:none; display:inline-block;">
@@ -858,7 +911,8 @@ Our team is vacuum-packing your fresh harvest for dispatch.
     `.trim();
 
     const textBody = `
-NEW COD ORDER RECEIVED: #${order.orderNumber}
+NEW ORDER RECEIVED: #${order.orderNumber}
+Payment: ${paymentLabel}
 Amount: ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}
 Customer: ${order.customerName || order.shippingRecipientName} (${order.shippingPhone || order.customerPhone})
 Destination: ${order.shippingCity || ""}, ${order.shippingPostalCode || ""}
@@ -867,10 +921,10 @@ Dashboard: ${appOrigin}/admin/orders
 
     return this.dispatchEmail({
       to: adminEmail,
-      subject: `[Admin Alert] New COD Order: #${order.orderNumber} (₹${order.finalPayableAmount})`,
+      subject: `[Admin Alert] ${subjectPrefix}: #${order.orderNumber} (₹${order.finalPayableAmount})`,
       html: htmlBody,
       text: textBody,
-      emailType: "ADMIN_ORDER_ALERT",
+      emailType: isCod ? "ADMIN_COD_ORDER_ALERT" : "ADMIN_ONLINE_ORDER_ALERT",
     });
   }
 

@@ -56,7 +56,11 @@ export const LoginSchema = z
       .optional()
       .nullable()
       .or(z.literal(""))
-      .transform((v) => (v && v.length > 0 ? v : undefined)),
+      .transform((val) => {
+        if (!val) return undefined;
+        const cleaned = val.replace(/[\s-]/g, "");
+        return cleaned.length > 0 ? cleaned : undefined;
+      }),
     password: z.string().min(1, "Password is required"),
   })
   .refine((data) => !!(data.email || data.phone), {
@@ -65,7 +69,15 @@ export const LoginSchema = z
 
 export const AdminLoginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Please provide a valid email address").optional(),
-  phone: z.string().trim().optional(),
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .transform((val) => {
+      if (!val) return undefined;
+      const cleaned = val.replace(/[\s-]/g, "");
+      return cleaned.length > 0 ? cleaned : undefined;
+    }),
   password: z.string().min(1, "Password is required"),
   totpCode: z.string().regex(/^\d{6}$/, "TOTP code must be 6 digits").optional(),
 }).refine((data) => data.email || data.phone, {
