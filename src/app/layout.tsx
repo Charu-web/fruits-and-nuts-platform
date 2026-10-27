@@ -123,7 +123,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
       </head>
-      <body className="min-h-screen flex flex-col bg-[#F6F0E5] text-[#123D30] antialiased selection:bg-[#B99553]/25 selection:text-[#123D30]">
+      <body className="min-h-screen flex flex-col bg-[#F6F0E5] text-[#123D30] antialiased selection:bg-[#B99553]/25 selection:text-[#123D30] overflow-x-hidden w-full">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#173D2C] focus:text-[#FAF7F0] focus:ring-2 focus:ring-[#B89453] focus:rounded-md focus:shadow-lg focus:outline-none text-xs font-semibold tracking-wide"
@@ -134,7 +134,7 @@ export default function RootLayout({
           <AnnouncementBar />
           <Header />
           <CartDrawer />
-          <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
+          <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none overflow-x-hidden w-full">
             {children}
           </main>
           <Footer />

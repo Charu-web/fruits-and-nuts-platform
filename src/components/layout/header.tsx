@@ -58,6 +58,25 @@ export function Header() {
     setIsMegaMenuOpen(false);
   }, [pathname]);
 
+  // Prevent background scroll and support Escape key when mobile navigation drawer is open
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      }
+    }
+    if (isMobileMenuOpen) {
+      document.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [isMobileMenuOpen]);
+
   // Do not render storefront header on administrative consoles
   if (pathname?.startsWith("/admin")) return null;
 
@@ -65,17 +84,17 @@ export function Header() {
     <>
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E5DEC9] transition-all">
         {/* Main Header Bar */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             {/* Left: Mobile Menu Trigger */}
-            <div className="flex items-center lg:hidden">
+            <div className="flex items-center lg:hidden shrink-0">
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 aria-label="Toggle navigation menu"
                 aria-expanded={isMobileMenuOpen}
                 aria-controls="mobile-navigation-drawer"
-                className="p-2 text-[#173D2C] hover:text-[#B89453] focus:outline-none transition-colors cursor-pointer rounded-lg hover:bg-[#FAF7F0]"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 text-[#173D2C] hover:text-[#B89453] focus:outline-none transition-colors cursor-pointer rounded-lg hover:bg-[#FAF7F0] touch-manipulation"
               >
                 {isMobileMenuOpen ? (
                   <X className="w-6 h-6" />
@@ -86,19 +105,19 @@ export function Header() {
             </div>
 
             {/* Center-Left: Brand Logo & Wordmark */}
-            <div className="flex items-center">
+            <div className="flex items-center min-w-0">
               <Link href="/" className="flex flex-col items-center group">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   <img
                     src="/images/logo.jpg"
                     alt="Fruits & Nuts Official Logo"
-                    className="h-8 sm:h-9 w-auto object-contain rounded-md bg-white px-1 py-0.5 border border-[#B89453]/60 shadow-xs group-hover:border-[#B89453] group-hover:scale-105 transition-all"
+                    className="h-7 sm:h-9 w-auto object-contain rounded-md bg-white px-1 py-0.5 border border-[#B89453]/60 shadow-xs group-hover:border-[#B89453] group-hover:scale-105 transition-all"
                   />
-                  <span className="font-serif text-lg sm:text-xl font-bold tracking-[0.08em] text-[#173D2C] group-hover:text-[#987B3E] transition-colors leading-none">
-                    FRUITS & NUTS
+                  <span className="font-serif text-base sm:text-xl font-bold tracking-[0.06em] sm:tracking-[0.08em] text-[#173D2C] group-hover:text-[#987B3E] transition-colors leading-none whitespace-nowrap">
+                    FRUITS &amp; NUTS
                   </span>
                 </div>
-                <span className="text-[9.5px] sm:text-[10.5px] tracking-[0.2em] text-[#7E5E1E] font-bold text-center w-full pt-1">
+                <span className="text-[8.5px] sm:text-[10.5px] tracking-[0.16em] sm:tracking-[0.2em] text-[#7E5E1E] font-bold text-center w-full pt-1 truncate">
                   Nutrition with an Emotion
                 </span>
               </Link>
@@ -151,7 +170,7 @@ export function Header() {
             </div>
 
             {/* Right: Utility Actions (Search, Account, Wishlist, Cart) */}
-            <div className="flex items-center gap-1 sm:gap-2.5">
+            <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
               {/* AI Sommelier Quick Trigger */}
               <button
                 type="button"
@@ -168,7 +187,7 @@ export function Header() {
                 type="button"
                 onClick={() => setIsSearchModalOpen(true)}
                 aria-label="Search gourmet harvests"
-                className="flex items-center gap-2 p-2 sm:px-3 sm:py-1.5 text-[#173D2C] hover:text-[#B89453] rounded-full hover:bg-[#FAF7F0] transition-colors cursor-pointer border border-transparent sm:border-[#E5DEC9]"
+                className="min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center gap-1.5 sm:gap-2 p-1.5 sm:px-3 sm:py-1.5 text-[#173D2C] hover:text-[#B89453] rounded-full hover:bg-[#FAF7F0] transition-colors cursor-pointer border border-transparent sm:border-[#E5DEC9] touch-manipulation"
               >
                 <Search className="w-4 h-4 sm:w-4 sm:h-4" />
                 <span className="hidden sm:inline text-xs text-[#5F6D65]">Search...</span>
@@ -181,7 +200,7 @@ export function Header() {
               <Link
                 href="/login"
                 aria-label="Customer Account"
-                className="p-2 text-[#173D2C] hover:text-[#B89453] transition-colors rounded-full hover:bg-[#FAF7F0] cursor-pointer"
+                className="min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center p-1.5 sm:p-2 text-[#173D2C] hover:text-[#B89453] transition-colors rounded-full hover:bg-[#FAF7F0] cursor-pointer touch-manipulation"
               >
                 <User className="w-5 h-5" />
               </Link>
@@ -200,7 +219,7 @@ export function Header() {
                 type="button"
                 onClick={toggleDrawer}
                 aria-label={`Open shopping cart with ${summary.itemCount} items`}
-                className="flex items-center gap-2 px-3 sm:px-3.5 py-1.5 bg-[#173D2C] text-[#FAF7F0] rounded-full hover:bg-[#102C21] border border-[#B89453]/40 transition-all shadow-xs group cursor-pointer ml-1"
+                className="min-h-[40px] sm:min-h-[44px] flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 bg-[#173D2C] text-[#FAF7F0] rounded-full hover:bg-[#102C21] border border-[#B89453]/40 transition-all shadow-xs group cursor-pointer ml-0.5 touch-manipulation"
               >
                 <ShoppingBag className="w-4 h-4 text-[#D4B776]" />
                 <span className="text-xs font-bold text-[#D4B776]">{summary.itemCount}</span>
@@ -244,21 +263,23 @@ export function Header() {
 
         {/* Mega Menu Dropdown */}
         <MegaMenu isOpen={isMegaMenuOpen} onClose={() => setIsMegaMenuOpen(false)} />
+      </header>
 
-        {/* Mobile Navigation Drawer */}
-        {isMobileMenuOpen && (
+      {/* Mobile Navigation Drawer (Rendered outside <header> so it is never trapped by backdrop-filter) */}
+      {isMobileMenuOpen && (
+        <div
+          id="mobile-navigation-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile Navigation Menu"
+          className="lg:hidden fixed inset-0 z-50 bg-[#173D2C]/60 backdrop-blur-xs flex animate-fade-in"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
           <div
-            id="mobile-navigation-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Mobile Navigation Menu"
-            className="lg:hidden fixed inset-0 top-20 z-50 bg-[#173D2C]/50 backdrop-blur-xs animate-fade-in"
-            onClick={() => setIsMobileMenuOpen(false)}
+            className="w-4/5 max-w-sm h-full bg-[#FAF7F0] border-r border-[#E5DEC9] p-5 shadow-2xl overflow-y-auto flex flex-col justify-between"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="w-4/5 max-w-sm h-full bg-[#FAF7F0] border-r border-[#E5DEC9] p-5 shadow-2xl overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div>
               <div className="flex items-center justify-between pb-4 border-b border-[#E5DEC9]">
                 <div className="flex items-center gap-2">
                   <img
@@ -279,7 +300,7 @@ export function Header() {
                   type="button"
                   onClick={() => setIsMobileMenuOpen(false)}
                   aria-label="Close navigation menu"
-                  className="p-1 text-[#5F6D65] hover:text-[#173D2C] cursor-pointer"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-[#5F6D65] hover:text-[#173D2C] cursor-pointer rounded-lg hover:bg-neutral-200/50 touch-manipulation"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -378,8 +399,8 @@ export function Header() {
               </nav>
             </div>
           </div>
-        )}
-      </header>
+        </div>
+      )}
 
       {/* Global Interactive Search Modal */}
       <SearchModal

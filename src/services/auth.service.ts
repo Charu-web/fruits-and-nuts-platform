@@ -944,7 +944,11 @@ export class AuthService {
           email: user.email,
           passwordHash: user.passwordHash,
         });
-      } catch {
+      } catch (tokenErr: any) {
+        console.error(
+          `[AuthService:ForgotPassword] Failed to generate signed JWT token for user ${user.id}:`,
+          tokenErr?.message
+        );
         generatedToken = generateSecureRandomToken(32);
       }
       const hashedToken = hashOpaqueToken(generatedToken);
@@ -957,13 +961,13 @@ export class AuthService {
         }
       }
 
-      // Store hashed token with 15-minute TTL and persist to disk
+      // Store hashed token with 1-hour TTL and persist to disk
       RESET_TOKENS.set(hashedToken, {
         tokenHash: hashedToken,
         rawToken: generatedToken,
         userId: user.id,
         identifier: user.email || user.phone || identifier,
-        expiresAt: Date.now() + 15 * 60 * 1000,
+        expiresAt: Date.now() + 60 * 60 * 1000,
         used: false,
         attempts: 0,
       });
@@ -1037,24 +1041,55 @@ export class AuthService {
       throw AppError.validation("Invalid or expired password reset token.");
     }
 
+    // In local dev/test environment, enforce dev cache invalidation for superseded or expired tokens
+    if (process.env.NODE_ENV !== "production") {
+      syncDevAuthFromDisk();
+      const hashedToken = hashOpaqueToken(cleanToken);
+      const devRecord = RESET_TOKENS.get(hashedToken);
+      if (RESET_TOKENS.size > 0 && !devRecord) {
+        throw AppError.validation("Invalid or expired password reset token.");
+      }
+      if (devRecord && Date.now() > devRecord.expiresAt) {
+        throw AppError.validation("Invalid or expired password reset token.");
+      }
+    }
+
     // Hash new password using bcrypt (12 salt rounds)
     const newPasswordHash = await hashPassword(newPassword);
 
     // 1. Try stateless signed JWT verification (primary path for serverless production)
-    const jwtPayload = await verifyPasswordResetToken(cleanToken);
-    if (jwtPayload) {
+    const verification = await verifyPasswordResetToken(cleanToken);
+    if (!verification.success && verification.expired) {
+      throw AppError.validation(
+        "This password reset link has expired. Password reset links are valid for 1 hour. Please request a new link."
+      );
+    }
+
+    if (verification.success && verification.payload) {
+      const jwtPayload = verification.payload;
       let userRecord: any = null;
-      try {
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jwtPayload.userId);
-        if (isUuid) {
-          userRecord = await db.user.findUnique({ where: { id: jwtPayload.userId } });
-        } else if (jwtPayload.email) {
-          userRecord = await db.user.findFirst({
-            where: { email: { equals: jwtPayload.email.trim().toLowerCase(), mode: "insensitive" } },
-          });
+      let lastDbError: Error | null = null;
+
+      // Database lookup with retry resilience for serverless database cold starts
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jwtPayload.userId);
+          if (isUuid) {
+            userRecord = await db.user.findUnique({ where: { id: jwtPayload.userId } });
+          }
+          if (!userRecord && jwtPayload.email) {
+            userRecord = await db.user.findFirst({
+              where: { email: { equals: jwtPayload.email.trim().toLowerCase(), mode: "insensitive" } },
+            });
+          }
+          if (userRecord) break;
+        } catch (dbErr: any) {
+          lastDbError = dbErr;
+          console.warn(`[AuthService:ResetPassword] Database lookup attempt ${attempt} failed: ${dbErr?.message}`);
+          if (attempt === 1) {
+            await new Promise((resolve) => setTimeout(resolve, 800));
+          }
         }
-      } catch (dbErr: any) {
-        console.warn("[AuthService:ResetPassword] Database lookup failed, checking DEV_USERS:", dbErr.message);
       }
 
       if (!userRecord) {
@@ -1063,6 +1098,12 @@ export class AuthService {
           (u) =>
             u.id === jwtPayload.userId ||
             (jwtPayload.email && u.email?.toLowerCase() === jwtPayload.email.toLowerCase())
+        );
+      }
+
+      if (!userRecord && lastDbError && process.env.NODE_ENV === "production") {
+        throw AppError.database(
+          "Database connection is temporarily busy. Please try submitting again in a moment."
         );
       }
 
@@ -1076,30 +1117,45 @@ export class AuthService {
         throw AppError.validation("This password reset token has already been used. Please request a new one.");
       }
 
-      // Update in database
+      // Update in database with retry resilience
       let dbUpdated = false;
-      try {
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userRecord.id);
-        if (isUuid) {
-          await db.user.update({
-            where: { id: userRecord.id },
-            data: { passwordHash: newPasswordHash },
-          });
-          dbUpdated = true;
-        } else if (userRecord.email) {
-          const found = await db.user.findFirst({
-            where: { email: { equals: userRecord.email.trim().toLowerCase(), mode: "insensitive" } },
-          });
-          if (found) {
+      let lastUpdateError: Error | null = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userRecord.id);
+          if (isUuid) {
             await db.user.update({
-              where: { id: found.id },
+              where: { id: userRecord.id },
               data: { passwordHash: newPasswordHash },
             });
             dbUpdated = true;
+            break;
+          } else if (userRecord.email) {
+            const found = await db.user.findFirst({
+              where: { email: { equals: userRecord.email.trim().toLowerCase(), mode: "insensitive" } },
+            });
+            if (found) {
+              await db.user.update({
+                where: { id: found.id },
+                data: { passwordHash: newPasswordHash },
+              });
+              dbUpdated = true;
+              break;
+            }
+          }
+        } catch (updateErr: any) {
+          lastUpdateError = updateErr;
+          console.error(`[AuthService:ResetPassword] DB update attempt ${attempt} error: ${updateErr?.message}`);
+          if (attempt === 1) {
+            await new Promise((resolve) => setTimeout(resolve, 800));
           }
         }
-      } catch (updateErr: any) {
-        console.error(`[AuthService:ResetPassword] DB update error: ${updateErr?.message}`);
+      }
+
+      if (!dbUpdated && lastUpdateError && process.env.NODE_ENV === "production") {
+        throw AppError.database(
+          "Failed to update password due to a temporary database error. Please try again."
+        );
       }
 
       // Update in DEV_USERS in-memory registry and persist to disk

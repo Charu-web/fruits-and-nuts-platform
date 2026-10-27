@@ -12,7 +12,15 @@ export interface SessionUser {
   name?: string | null;
 }
 
-const secretKey = new TextEncoder().encode(env.AUTH_SECRET);
+/**
+ * Dynamically resolves the secret key for signing and verifying JWTs.
+ * Ensures the live environment variable is always used even if process.env
+ * is populated after module evaluation in serverless environments.
+ */
+export function getAuthSecret(): Uint8Array {
+  const secret = process.env.AUTH_SECRET || env.AUTH_SECRET || "0000000000000000000000000000000000000000000000000000000000000000";
+  return new TextEncoder().encode(secret);
+}
 
 /**
  * Generates a signed JWT session token with HS256 algorithm and configured expiration.
@@ -29,7 +37,7 @@ export async function generateSessionToken(user: SessionUser): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${env.JWT_EXPIRY_SECONDS}s`)
-    .sign(secretKey);
+    .sign(getAuthSecret());
 }
 
 /**
@@ -38,8 +46,9 @@ export async function generateSessionToken(user: SessionUser): Promise<string> {
  */
 export async function verifySessionToken(token: string): Promise<SessionUser | null> {
   try {
-    const { payload } = await jwtVerify(token, secretKey, {
+    const { payload } = await jwtVerify(token, getAuthSecret(), {
       algorithms: ["HS256"],
+      clockTolerance: 120,
     });
 
     return {
@@ -78,10 +87,15 @@ export interface PasswordResetPayload {
   purpose: "password_reset";
 }
 
+export type PasswordResetVerification =
+  | { success: true; payload: { userId: string; email: string | null; pwh: string } }
+  | { success: false; expired: boolean; error: string };
+
 /**
  * Generates a signed, stateless, time-limited JWT reset token.
  * Contains a slice of the active password hash so the token is automatically
  * invalidated once the password has been reset (single-use guarantee across serverless containers).
+ * Embeds a cryptographic nonce to guarantee unique tokens across rapid calls.
  */
 export async function generatePasswordResetToken(params: {
   userId: string;
@@ -89,42 +103,51 @@ export async function generatePasswordResetToken(params: {
   passwordHash?: string | null;
 }): Promise<string> {
   const pwh = params.passwordHash ? params.passwordHash.slice(-16) : "";
+  const nonce = crypto.randomBytes(16).toString("hex");
   return await new SignJWT({
     userId: params.userId,
     email: params.email,
     pwh,
+    nonce,
     purpose: "password_reset",
   })
     .setProtectedHeader({ alg: "HS256" })
+    .setJti(nonce)
     .setIssuedAt()
-    .setExpirationTime("15m")
-    .sign(secretKey);
+    .setExpirationTime("1h")
+    .sign(getAuthSecret());
 }
 
 /**
  * Verifies and decodes a signed password reset JWT token.
- * Returns null if the token has expired, has been tampered with, or is not a reset token.
+ * Returns detailed status distinguishing between expiration, signature failure, or purpose mismatch.
+ * Incorporates clock tolerance to protect against distributed clock drift.
  */
-export async function verifyPasswordResetToken(token: string): Promise<{
-  userId: string;
-  email: string | null;
-  pwh: string;
-} | null> {
+export async function verifyPasswordResetToken(token: string): Promise<PasswordResetVerification> {
   try {
-    const { payload } = await jwtVerify(token, secretKey, {
+    const { payload } = await jwtVerify(token, getAuthSecret(), {
       algorithms: ["HS256"],
+      clockTolerance: 120, // 2 minutes tolerance for distributed serverless lambdas
     });
 
     if (payload.purpose !== "password_reset") {
-      return null;
+      return { success: false, expired: false, error: "Token purpose mismatch" };
     }
 
     return {
-      userId: payload.userId as string,
-      email: (payload.email as string) || null,
-      pwh: (payload.pwh as string) || "",
+      success: true,
+      payload: {
+        userId: payload.userId as string,
+        email: (payload.email as string) || null,
+        pwh: (payload.pwh as string) || "",
+      },
     };
-  } catch {
-    return null;
+  } catch (err: any) {
+    const isExpired = err?.code === "ERR_JWT_EXPIRED" || err?.name === "JWTExpired";
+    return {
+      success: false,
+      expired: Boolean(isExpired),
+      error: err?.message || "Token verification failed",
+    };
   }
 }

@@ -62,7 +62,7 @@ export function AnnouncementBar() {
     <aside
       aria-label="Promotional announcement"
       style={{ backgroundColor: data.bgColor || "#173D2C", color: data.textColor || "#FAF7F0" }}
-      className="text-xs font-medium tracking-wide py-2 px-4 transition-all duration-300 relative border-b border-[#B89453]/30 shadow-xs"
+      className="text-xs font-medium tracking-wide py-2 px-3 sm:px-4 transition-all duration-300 relative border-b border-[#B89453]/30 shadow-xs overflow-hidden"
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="flex-1 text-center flex items-center justify-center gap-2 sm:gap-4 flex-wrap">
@@ -116,7 +116,7 @@ export function AnnouncementBar() {
           <button
             onClick={() => setIsVisible(false)}
             aria-label="Dismiss announcement"
-            className="text-[#FAF7F0]/60 hover:text-white transition-colors p-1 -mr-1 cursor-pointer"
+            className="text-[#FAF7F0]/60 hover:text-white transition-colors p-1.5 -mr-1 cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center shrink-0 touch-manipulation"
           >
             <X className="w-3.5 h-3.5" />
           </button>

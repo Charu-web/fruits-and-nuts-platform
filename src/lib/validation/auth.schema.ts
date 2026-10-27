@@ -114,7 +114,7 @@ export const ForgotPasswordSchema = z
 
 export const ResetPasswordSchema = z
   .object({
-    token: z.string().min(16, "Reset token is required"),
+    token: z.string().trim().min(16, "Reset token is required"),
     newPassword: z.string().min(8, "Password must be at least 8 characters"),
     confirmPassword: z.string().min(8, "Confirm password must be at least 8 characters").optional(),
   })

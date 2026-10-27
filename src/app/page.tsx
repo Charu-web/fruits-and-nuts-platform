@@ -217,15 +217,15 @@ export default function HomePage() {
           }}
         />
 
-        <div className="max-w-7xl mx-auto py-14 sm:py-20 lg:py-24 px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
+        <div className="max-w-7xl mx-auto py-8 sm:py-16 lg:py-24 px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
             {/* Left Column: Brand Messaging & Action */}
-            <div className="lg:col-span-7 space-y-7 text-left">
+            <div className="lg:col-span-7 space-y-5 sm:space-y-7 text-left">
               {/* Refined Eyebrow */}
-              <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[#102C21] border border-[#C3A15D]/40 shadow-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#D4B776]" />
-                <span className="text-[#D4B776] text-[10px] sm:text-[11px] font-bold tracking-[0.22em] uppercase">
-                  The Finest from Nature • Est. in India
+              <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-full bg-[#102C21] border border-[#C3A15D]/40 shadow-xs max-w-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#D4B776] shrink-0 animate-pulse" />
+                <span className="text-[#D4B776] text-[10px] sm:text-[11px] font-bold tracking-[0.16em] sm:tracking-[0.22em] uppercase truncate">
+                  Featured: {activeHero.name} • {activeHero.price}
                 </span>
               </div>
 
@@ -242,10 +242,10 @@ export default function HomePage() {
               </p>
 
               {/* CTAs */}
-              <div className="flex flex-wrap items-center gap-4 pt-2">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-1 sm:pt-2">
                 <Link
                   href="/shop"
-                  className="px-8 py-4 bg-[#C3A15D] hover:bg-[#A8853D] text-[#173D2C] font-bold rounded-lg shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 text-xs sm:text-sm uppercase tracking-widest inline-flex items-center gap-2 active:scale-98 cursor-pointer border border-[#C3A15D]"
+                  className="px-6 sm:px-8 py-3.5 sm:py-4 bg-[#C3A15D] hover:bg-[#A8853D] text-[#173D2C] font-bold rounded-lg shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 text-xs sm:text-sm uppercase tracking-widest inline-flex items-center gap-2 active:scale-98 cursor-pointer border border-[#C3A15D]"
                 >
                   <span>Explore the Collection</span>
                   <ArrowRight className="w-4 h-4" />
@@ -253,7 +253,7 @@ export default function HomePage() {
 
                 <Link
                   href="/build-your-own-box"
-                  className="px-7 py-4 bg-white/10 hover:bg-white/20 border border-white/30 hover:border-[#D4B776] text-[#FAF7F0] font-semibold rounded-lg backdrop-blur-xs transition-all duration-300 text-xs sm:text-sm tracking-widest uppercase inline-flex items-center gap-2 active:scale-98 cursor-pointer hover:-translate-y-0.5"
+                  className="px-5 sm:px-7 py-3.5 sm:py-4 bg-white/10 hover:bg-white/20 border border-white/30 hover:border-[#D4B776] text-[#FAF7F0] font-semibold rounded-lg backdrop-blur-xs transition-all duration-300 text-xs sm:text-sm tracking-widest uppercase inline-flex items-center gap-2 active:scale-98 cursor-pointer hover:-translate-y-0.5"
                 >
                   <Gift className="w-4 h-4 text-[#D4B776]" />
                   <span>Discover Gifting</span>
@@ -261,7 +261,7 @@ export default function HomePage() {
               </div>
 
               {/* Verified Trust Badges Only */}
-              <div className="pt-6 flex flex-wrap items-center gap-6 text-xs text-[#FAF7F0]/80 border-t border-white/15">
+              <div className="pt-4 sm:pt-6 flex flex-wrap items-center gap-4 sm:gap-6 text-xs text-[#FAF7F0]/80 border-t border-white/15">
                 <div className="flex items-center gap-2 font-medium tracking-wide">
                   <Truck className="w-4 h-4 text-[#D4B776]" />
                   <span>Free Delivery Over ₹999</span>
@@ -278,8 +278,8 @@ export default function HomePage() {
             </div>
 
             {/* Right Column: Verified Editorial Product Showcase */}
-            <div className="lg:col-span-5 flex justify-center lg:justify-end">
-              <div className="relative w-full max-w-[440px] rounded-xl overflow-hidden border border-[#C3A15D]/50 shadow-2xl bg-[#FAF7F0] transition-all duration-500 hover:border-[#D4B776]">
+            <div className="lg:col-span-5 flex justify-center lg:justify-end w-full">
+              <div className="relative w-full max-w-[380px] sm:max-w-[440px] rounded-xl overflow-hidden border border-[#C3A15D]/50 shadow-2xl bg-[#FAF7F0] transition-all duration-500 hover:border-[#D4B776]">
                 {/* Product Photography Container */}
                 <div className="relative aspect-[4/3] sm:aspect-[1/1] max-h-[380px] w-full bg-[#FAF7F0] overflow-hidden group">
                   {activeHero.imageUrl ? (
@@ -481,9 +481,9 @@ export default function HomePage() {
       {/* ============================================================ */}
       {/* SECTION C: CUSTOMER BESTSELLERS                               */}
       {/* ============================================================ */}
-      <section className="py-16 sm:py-24 bg-white border-y border-[#E5DEC9] px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-24 bg-white border-y border-[#E5DEC9] px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-7xl mx-auto space-y-10">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-[#E5DEC9]">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-[#E5DEC9] min-w-0">
             <div>
               <span className="text-[10px] sm:text-xs font-bold tracking-[0.24em] text-[#987B3E] uppercase block mb-1.5">
                 Signature Harvests
@@ -497,7 +497,7 @@ export default function HomePage() {
             </div>
 
             {/* Collection Tab Switcher */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full min-w-0 w-full md:w-auto touch-pan-x scrollbar-none">
               {[
                 { id: "bestsellers", label: "All Bestsellers" },
                 { id: "dry-fruits", label: "Royal Nuts" },
