@@ -224,8 +224,8 @@ export class NotificationService {
         const host = process.env.SMTP_HOST!.trim();
         const port = parseInt(process.env.SMTP_PORT || "587", 10);
         const secure = process.env.SMTP_SECURE === "true" || port === 465;
-        const user = process.env.SMTP_USER?.trim();
-        const rawPass = process.env.SMTP_PASS?.trim();
+        const user = process.env.SMTP_USER?.trim().replace(/^["']|["']$/g, "");
+        const rawPass = process.env.SMTP_PASS?.trim().replace(/^["']|["']$/g, "");
         const pass = host.includes("gmail.com") ? rawPass?.replace(/\s+/g, "") : rawPass;
 
         let smtpResponse = "250 OK";
@@ -1100,10 +1100,13 @@ Dashboard: ${appOrigin}/admin/orders
             step = 10;
             const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
             const messageId = `<pwreset-${Date.now()}-${Math.random().toString(36).slice(2, 10)}@gmail.com>`;
+            const base64Text = Buffer.from(text, "utf8").toString("base64").match(/.{1,76}/g)?.join("\r\n") || "";
+            const base64Html = Buffer.from(html, "utf8").toString("base64").match(/.{1,76}/g)?.join("\r\n") || "";
             const mimeMessage = [
               `Date: ${new Date().toUTCString()}`,
               `Message-ID: ${messageId}`,
               `From: ${from}`,
+              `Reply-To: ${from}`,
               `To: ${recipientEmail}`,
               `Subject: ${subject}`,
               `MIME-Version: 1.0`,
@@ -1111,15 +1114,15 @@ Dashboard: ${appOrigin}/admin/orders
               ``,
               `--${boundary}`,
               `Content-Type: text/plain; charset=UTF-8`,
-              `Content-Transfer-Encoding: 7bit`,
+              `Content-Transfer-Encoding: base64`,
               ``,
-              text,
+              base64Text,
               ``,
               `--${boundary}`,
               `Content-Type: text/html; charset=UTF-8`,
-              `Content-Transfer-Encoding: 7bit`,
+              `Content-Transfer-Encoding: base64`,
               ``,
-              html,
+              base64Html,
               ``,
               `--${boundary}--`,
               `.`,
