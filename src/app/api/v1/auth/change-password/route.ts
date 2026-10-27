@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     const sessionUser = await requireAuth(request);
     const body = await request.json();
-    const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
     const userAgent = request.headers.get("user-agent") || undefined;
 
     const result = await AuthService.changePassword(

@@ -56,20 +56,29 @@ export function apiError(error: unknown, requestId?: string): NextResponse<ApiEr
     );
   }
 
-  if (error instanceof AppError) {
+  const isAppErr =
+    error instanceof AppError ||
+    (typeof error === "object" &&
+      error !== null &&
+      ("isOperational" in error || "code" in error || "statusCode" in error));
+
+  if (isAppErr) {
+    const err = error as any;
     return NextResponse.json(
       {
         success: false,
         error: {
-          code: error.code,
-          message: error.message,
-          ...(typeof error.details === "object" && error.details !== null ? { details: error.details } : {}),
+          code: err.code || ErrorCode.VALIDATION_ERROR,
+          message: err.message || "An application error occurred.",
+          ...(typeof err.details === "object" && err.details !== null ? { details: err.details } : {}),
           ...(requestId ? { requestId } : {}),
         },
       },
-      { status: error.statusCode }
+      { status: typeof err.statusCode === "number" ? err.statusCode : 400 }
     );
   }
+
+  console.error(`[API Internal Error] [${requestId}]:`, error);
 
   // Handle generic / unexpected internal errors (sanitized for production)
   const isDev = process.env.NODE_ENV === "development";

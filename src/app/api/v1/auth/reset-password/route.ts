@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   const requestId = await getRequestId();
 
   try {
-    const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
     await enforceRateLimit({
       key: `reset_pw_${ip}`,
       limit: 5,

@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // 1. Enforce rate limiting on login endpoint (Max 10 attempts / 5 mins per IP)
-    const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
     await enforceRateLimit({
       key: `login_${ip}`,
       limit: 10,
