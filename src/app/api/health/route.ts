@@ -31,39 +31,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (checkType === "smtp-probe") {
-      const { NotificationService } = await import("@/services/notification.service");
-      const readiness = NotificationService.getReadinessStatus();
-      const conn = await NotificationService.testSmtpConnection();
-      let sendTest: any = null;
-      if (searchParams.get("send") === "true") {
-        const testTarget = searchParams.get("to") || process.env.ADMIN_EMAIL || "fruitsnutswebsite@gmail.com";
-        sendTest = await NotificationService.sendPasswordResetEmail(
-          testTarget,
-          "https://fruits-and-nuts-platform.vercel.app/reset-password?token=probe-diagnostic-check"
-        );
-      }
-      return apiSuccess(
-        {
-          status: "probe_complete",
-          readiness,
-          connection: conn,
-          dispatchResult: sendTest,
-          envPresence: {
-            hasSmtpHost: Boolean(process.env.SMTP_HOST),
-            hasSmtpUser: Boolean(process.env.SMTP_USER),
-            hasSmtpPass: Boolean(process.env.SMTP_PASS),
-            smtpPassLength: process.env.SMTP_PASS ? process.env.SMTP_PASS.trim().length : 0,
-            smtpPort: process.env.SMTP_PORT || "587",
-            emailProvider: process.env.EMAIL_PROVIDER || "UNSET",
-          },
-          timestamp: new Date().toISOString(),
-        },
-        200,
-        { requestId }
-      );
-    }
-
     // Readiness check: Verify database connectivity with low-overhead query
     let databaseStatus = "disconnected";
     try {
