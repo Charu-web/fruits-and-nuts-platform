@@ -8,6 +8,7 @@ import { OrderService } from "@/services/order.service";
 import { AuthService } from "@/services/auth.service";
 import { CreateOrderSchema } from "@/lib/validation/order.schema";
 import { AppError } from "@/lib/errors/app-error";
+import { db } from "@/lib/db";
 
 // Idempotency cache for atomic duplicate order prevention (TTL: 10 minutes)
 interface CachedOrderRecord {
@@ -31,8 +32,9 @@ export async function POST(req: NextRequest) {
   try {
     cleanExpiredIdempotencyKeys();
 
-    // 1. Enforce server-side rate limit on checkout creation (Max 10 orders per 5 mins per IP)
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
+
+    // 1. Enforce local sliding-window rate limit on checkout creation (Max 10 orders per 5 mins per IP)
     await enforceRateLimit({
       key: `order_creation_${ip}`,
       limit: 10,
@@ -43,11 +45,71 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validated = CreateOrderSchema.parse(body);
 
-    // 2. Check Idempotency Key if provided by client
+    // 2. Shared persistent COD rate limiting across all Vercel instances
+    if (validated.paymentMethod === "COD") {
+      try {
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        const recentCodAttempts = await db.auditLog.count({
+          where: {
+            action: "CHECKOUT_COD_ATTEMPT",
+            ipAddress: ip,
+            createdAt: { gte: tenMinutesAgo },
+          },
+        });
+
+        if (recentCodAttempts >= 10) {
+          throw new AppError(
+            "Too many Cash on Delivery order attempts from this network. Please wait a few minutes or proceed with online payment.",
+            // @ts-expect-error RATE_LIMITED maps to 429 in AppError
+            "RATE_LIMITED",
+            { retryAfterSeconds: 600 }
+          );
+        }
+
+        // Record attempt in persistent audit log
+        await db.auditLog.create({
+          data: {
+            action: "CHECKOUT_COD_ATTEMPT",
+            entityName: "RATE_LIMIT_COD",
+            entityId: ip,
+            ipAddress: ip,
+          },
+        });
+      } catch (rateErr) {
+        if (rateErr instanceof AppError) throw rateErr;
+        // Non-blocking fallback if database check is delayed
+        console.warn("[Checkout] Persistent COD rate limit check skipped due to DB warning:", rateErr);
+      }
+    }
+
+    // 3. Shared persistent Idempotency check (Fast memory cache + Shared PostgreSQL audit store)
     if (validated.idempotencyKey) {
+      // Fast memory path
       const cached = idempotencyMap.get(validated.idempotencyKey);
       if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
         return apiSuccess(cached.order, 200, { requestId });
+      }
+
+      // Shared persistent PostgreSQL path (survives multi-instance Vercel and retries)
+      try {
+        const existingAudit = await db.auditLog.findFirst({
+          where: {
+            action: "ORDER_CREATED_IDEMPOTENT",
+            entityName: "IDEMPOTENCY_KEY",
+            entityId: validated.idempotencyKey,
+            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          },
+        });
+
+        if (existingAudit?.newState) {
+          idempotencyMap.set(validated.idempotencyKey, {
+            order: existingAudit.newState,
+            timestamp: Date.now(),
+          });
+          return apiSuccess(existingAudit.newState, 200, { requestId });
+        }
+      } catch (idempErr) {
+        console.warn("[Checkout] Persistent idempotency check fallback:", idempErr);
       }
     }
 
@@ -79,12 +141,29 @@ export async function POST(req: NextRequest) {
 
     const order = await OrderService.createOrder(user.id, validated);
 
-    // Store in idempotency cache
+    // 4. Store in memory and persistent database idempotency store
     if (validated.idempotencyKey) {
       idempotencyMap.set(validated.idempotencyKey, {
         order,
         timestamp: Date.now(),
       });
+
+      try {
+        const isActorUuid =
+          user.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
+        await db.auditLog.create({
+          data: {
+            actorId: isActorUuid ? user.id : null,
+            action: "ORDER_CREATED_IDEMPOTENT",
+            entityName: "IDEMPOTENCY_KEY",
+            entityId: validated.idempotencyKey,
+            newState: order as any,
+            ipAddress: ip,
+          },
+        });
+      } catch (persistErr) {
+        console.warn("[Checkout] Failed to persist idempotency key to DB:", persistErr);
+      }
     }
 
     return apiSuccess(order, 201, { requestId });

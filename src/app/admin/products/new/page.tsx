@@ -45,7 +45,7 @@ export default function AdminNewProductPage() {
   const [primaryImageUrl, setPrimaryImageUrl] = useState("");
   const [primaryImageAlt, setPrimaryImageAlt] = useState("");
 
-  // Load Categories on mount with timeout and retry support
+  // Load Categories on mount with timeout and retry support (Direct DB admin categories with public fresh fallback)
   const loadCategories = async () => {
     try {
       setIsLoadingCategories(true);
@@ -54,11 +54,21 @@ export default function AdminNewProductPage() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-      const res = await fetch("/api/v1/categories", {
+      // Attempt authenticated admin categories first to fetch newly created database categories immediately
+      let res = await fetch("/api/v1/admin/categories", {
         signal: controller.signal,
         headers: { Accept: "application/json" },
         cache: "no-store",
-      });
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        // Fallback to fresh public categories endpoint with cache-busting
+        res = await fetch(`/api/v1/categories?fresh=1&t=${Date.now()}`, {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+      }
       clearTimeout(timeoutId);
 
       if (!res.ok) {

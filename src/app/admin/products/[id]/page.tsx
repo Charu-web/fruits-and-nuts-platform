@@ -112,12 +112,24 @@ export default function AdminProductEditorPage() {
       setCategoryError(null);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch("/api/v1/categories", {
+
+      // Attempt authenticated admin categories first to fetch newly created database categories immediately
+      let res = await fetch("/api/v1/admin/categories", {
         signal: controller.signal,
         headers: { Accept: "application/json" },
         cache: "no-store",
-      });
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        // Fallback to fresh public categories endpoint with cache-busting
+        res = await fetch(`/api/v1/categories?fresh=1&t=${Date.now()}`, {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+      }
       clearTimeout(timeoutId);
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
