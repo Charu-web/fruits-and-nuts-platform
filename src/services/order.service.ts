@@ -541,7 +541,7 @@ export class OrderService {
       validated;
 
     try {
-      return await runTransaction(async (tx) => {
+      const txResult = await runTransaction(async (tx) => {
         // 1. Fetch user profile
         const user = await tx.user.findUnique({
           where: { id: userId },
@@ -900,15 +900,6 @@ export class OrderService {
           })),
         };
 
-        if (paymentMethod === "COD") {
-          NotificationService.sendOrderConfirmationEmail(hydratedOrder).catch((e) =>
-            console.warn("[OrderService] Customer COD email skipped/failed:", e.message)
-          );
-          NotificationService.sendAdminNewOrderNotification(hydratedOrder).catch((e) =>
-            console.warn("[OrderService] Admin COD notification skipped/failed:", e.message)
-          );
-        }
-
         try {
           syncDevOrdersFromDisk();
           const idx = DEV_ORDERS.findIndex((o) => o.id === order.id || o.orderNumber === order.orderNumber);
@@ -920,8 +911,21 @@ export class OrderService {
           saveDevOrdersToDisk();
         } catch {}
 
-        return order;
+        return { order, hydratedOrder };
       });
+
+      if (paymentMethod === "COD") {
+        try {
+          await Promise.allSettled([
+            NotificationService.sendOrderConfirmationEmail(txResult.hydratedOrder),
+            NotificationService.sendAdminNewOrderNotification(txResult.hydratedOrder),
+          ]);
+        } catch (notifErr: any) {
+          console.warn("[OrderService] Post-commit order notification error:", notifErr?.message);
+        }
+      }
+
+      return txResult.order;
     } catch (dbErr: any) {
       if (dbErr instanceof AppError) {
         throw dbErr;
@@ -1066,12 +1070,14 @@ export class OrderService {
       DEV_ORDERS.unshift(devOrder);
       saveDevOrdersToDisk();
       if (paymentMethod === "COD") {
-        NotificationService.sendOrderConfirmationEmail(devOrder).catch((e) =>
-          console.warn("[OrderService] Customer COD email skipped/failed:", e.message)
-        );
-        NotificationService.sendAdminNewOrderNotification(devOrder).catch((e) =>
-          console.warn("[OrderService] Admin COD notification skipped/failed:", e.message)
-        );
+        try {
+          await Promise.allSettled([
+            NotificationService.sendOrderConfirmationEmail(devOrder),
+            NotificationService.sendAdminNewOrderNotification(devOrder),
+          ]);
+        } catch (e: any) {
+          console.warn("[OrderService] Dev fallback order notification error:", e?.message);
+        }
       }
       return devOrder;
     }

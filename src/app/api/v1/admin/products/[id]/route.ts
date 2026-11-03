@@ -49,3 +49,6 @@ export async function DELETE(
     return apiError(error, requestId);
   }
 }
+
+export { PUT as PATCH };
+

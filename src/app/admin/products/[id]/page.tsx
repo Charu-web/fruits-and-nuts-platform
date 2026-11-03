@@ -28,6 +28,12 @@ interface ImageDetail {
   sortOrder: number;
 }
 
+interface CategoryOption {
+  id: number;
+  name: string;
+  subcategories?: { id: number; name: string }[];
+}
+
 interface ProductDetail {
   id: string;
   name: string;
@@ -67,6 +73,8 @@ export default function AdminProductEditorPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [skuBase, setSkuBase] = useState("");
+  const [categoryId, setCategoryId] = useState<number | "">("");
+  const [subcategoryId, setSubcategoryId] = useState<number | "">("");
   const [description, setDescription] = useState("");
   const [ingredients, setIngredients] = useState("");
   const [allergenInfo, setAllergenInfo] = useState("");
@@ -79,6 +87,11 @@ export default function AdminProductEditorPage() {
   const [isByobEligible, setIsByobEligible] = useState(false);
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
+
+  // Category Taxonomy State
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   // Modal State for Variant Creation/Editing
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
@@ -98,6 +111,30 @@ export default function AdminProductEditorPage() {
   const [newImageAlt, setNewImageAlt] = useState("");
   const [newImageIsPrimary, setNewImageIsPrimary] = useState(false);
 
+  const loadCategories = async () => {
+    try {
+      setIsLoadingCategories(true);
+      setCategoryError(null);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch("/api/v1/categories", {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        setCategories(json.data);
+      }
+    } catch (err: any) {
+      setCategoryError(err.message || "Failed to load categories.");
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  };
+
   const fetchProduct = async () => {
     if (!productId) return;
     try {
@@ -111,6 +148,8 @@ export default function AdminProductEditorPage() {
           setName(p.name || "");
           setSlug(p.slug || "");
           setSkuBase(p.skuBase || "");
+          setCategoryId(p.categoryId || "");
+          setSubcategoryId(p.subcategoryId || "");
           setDescription(p.description || "");
           setIngredients(p.ingredients || "");
           setAllergenInfo(p.allergenInfo || "");
@@ -134,6 +173,7 @@ export default function AdminProductEditorPage() {
 
   useEffect(() => {
     fetchProduct();
+    loadCategories();
   }, [productId]);
 
   const handleSaveMasterProduct = async (e: React.FormEvent) => {
@@ -149,6 +189,8 @@ export default function AdminProductEditorPage() {
           name: name.trim(),
           slug: slug.trim(),
           skuBase: skuBase.trim(),
+          categoryId: categoryId ? Number(categoryId) : undefined,
+          subcategoryId: subcategoryId ? Number(subcategoryId) : null,
           description: description.trim(),
           ingredients: ingredients.trim() || null,
           allergenInfo: allergenInfo.trim() || null,
@@ -405,7 +447,7 @@ export default function AdminProductEditorPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block mb-1">
               SKU Base *
@@ -420,15 +462,75 @@ export default function AdminProductEditorPage() {
           </div>
 
           <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block">
+                Primary Category *
+              </label>
+              {categoryError && (
+                <button
+                  type="button"
+                  onClick={loadCategories}
+                  className="text-[10px] text-amber-700 font-bold underline hover:text-amber-800"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+            <select
+              required
+              value={categoryId}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : "";
+                setCategoryId(val);
+                setSubcategoryId("");
+              }}
+              disabled={isLoadingCategories}
+              className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium focus:outline-none focus:border-amber-500 disabled:opacity-60"
+            >
+              {isLoadingCategories ? (
+                <option value="">⏳ Loading categories...</option>
+              ) : categories.length === 0 ? (
+                <option value={product?.category?.id || ""}>{product?.category?.name || "No categories found"}</option>
+              ) : (
+                categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))
+              )}
+            </select>
+            {categoryError && (
+              <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-medium">
+                <span>⚠️</span> {categoryError}
+              </p>
+            )}
+          </div>
+
+          <div>
             <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block mb-1">
-              Category
+              Subcategory (Optional)
             </label>
-            <input
-              type="text"
-              disabled
-              value={product.category?.name || "—"}
-              className="w-full text-xs px-3.5 py-2.5 bg-stone-100 border border-stone-200 rounded-xl text-stone-500 cursor-not-allowed"
-            />
+            {(() => {
+              const selectedCat = categories.find((c) => c.id === categoryId);
+              const subList = selectedCat?.subcategories || [];
+              return (
+                <select
+                  value={subcategoryId}
+                  onChange={(e) => setSubcategoryId(e.target.value ? Number(e.target.value) : "")}
+                  disabled={isLoadingCategories || subList.length === 0}
+                  className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                >
+                  <option value="">
+                    {subList.length === 0 ? "None available" : "-- Select Subcategory --"}
+                  </option>
+                  {subList.map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
           </div>
 
           <div>

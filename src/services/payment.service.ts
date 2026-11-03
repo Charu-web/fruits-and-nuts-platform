@@ -187,12 +187,14 @@ export class PaymentService {
         reason: `Online payment authorized and verified (Payment ID: ${razorpayPaymentId})`,
       });
 
-      NotificationService.sendOrderConfirmationEmail(order).catch((e) =>
-        console.warn("[PaymentService] Customer payment confirmation email skipped/failed:", e.message)
-      );
-      NotificationService.sendAdminNewOrderNotification(order).catch((e) =>
-        console.warn("[PaymentService] Admin payment alert skipped/failed:", e.message)
-      );
+      try {
+        await Promise.allSettled([
+          NotificationService.sendOrderConfirmationEmail(order),
+          NotificationService.sendAdminNewOrderNotification(order),
+        ]);
+      } catch (e: any) {
+        console.warn("[PaymentService] Customer payment confirmation email error:", e?.message);
+      }
 
       return {
         message: "Payment verified successfully.",
@@ -282,12 +284,14 @@ export class PaymentService {
       items: order.items,
     };
 
-    NotificationService.sendOrderConfirmationEmail(fullConfirmedOrder).catch((e) =>
-      console.warn("[PaymentService] Customer payment confirmation email skipped/failed:", e.message)
-    );
-    NotificationService.sendAdminNewOrderNotification(fullConfirmedOrder).catch((e) =>
-      console.warn("[PaymentService] Admin payment alert skipped/failed:", e.message)
-    );
+    try {
+      await Promise.allSettled([
+        NotificationService.sendOrderConfirmationEmail(fullConfirmedOrder),
+        NotificationService.sendAdminNewOrderNotification(fullConfirmedOrder),
+      ]);
+    } catch (e: any) {
+      console.warn("[PaymentService] Post-verification notification error:", e?.message);
+    }
 
     return verificationResult;
   }
@@ -430,12 +434,14 @@ export class PaymentService {
               orderStatus: OrderStatus.CONFIRMED,
               paymentStatus: PaymentStatus.PAID,
             };
-            NotificationService.sendOrderConfirmationEmail(fullConfirmedOrder).catch((e) =>
-              console.warn("[PaymentService:Webhook] Customer confirmation email skipped/failed:", e.message)
-            );
-            NotificationService.sendAdminNewOrderNotification(fullConfirmedOrder).catch((e) =>
-              console.warn("[PaymentService:Webhook] Admin alert skipped/failed:", e.message)
-            );
+            try {
+              await Promise.allSettled([
+                NotificationService.sendOrderConfirmationEmail(fullConfirmedOrder),
+                NotificationService.sendAdminNewOrderNotification(fullConfirmedOrder),
+              ]);
+            } catch (e: any) {
+              console.warn("[PaymentService:Webhook] Customer confirmation email skipped/failed:", e?.message);
+            }
           } else if (order.orderStatus === OrderStatus.CANCELLED) {
             // Late Payment Handler (Hold expired before webhook arrived)
             let allItemsAvailable = true;

@@ -223,9 +223,10 @@ export class NotificationService {
       }
 
       if (provider === "SMTP") {
-        const host = process.env.SMTP_HOST!.trim();
+        const host = process.env.SMTP_HOST!.trim().replace(/^(ssl|tls|smtp):\/\//, "");
         const port = parseInt(process.env.SMTP_PORT || "587", 10);
-        const secure = process.env.SMTP_SECURE === "true" || port === 465;
+        // Explicit STARTTLS is required on ports 587 and 25. Direct implicit TLS is only for port 465.
+        const secure = port === 465 || (process.env.SMTP_SECURE === "true" && port !== 587 && port !== 25);
         const user = process.env.SMTP_USER?.trim().replace(/^["']|["']$/g, "");
         const rawPass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD)?.trim().replace(/^["']|["']$/g, "");
         const pass = host.includes("gmail.com") ? rawPass?.replace(/\s+/g, "") : rawPass;
@@ -383,7 +384,7 @@ export class NotificationService {
     const user = process.env.SMTP_USER?.trim() || "fruitsnutswebsite@gmail.com";
 
     return new Promise((resolve) => {
-      const socket = net.connect({ host, port }, () => {
+      const socket = net.connect({ host, port, family: 4 }, () => {
         socket.destroy();
         resolve({
           success: true,
@@ -748,11 +749,27 @@ Please do not share this code with anyone.
     order: any,
     options?: { forceRetry?: boolean }
   ): Promise<{ sent: boolean; provider: string; reason?: string }> {
-    const customerEmail =
+    let customerEmail =
       order.customerEmail ||
       order.user?.email ||
+      (typeof order.shippingAddress === "object" ? order.shippingAddress?.email : null) ||
       order.shippingRecipientEmail ||
       order.shippingEmail;
+
+    // Database lookup fallback if customerEmail is not in order payload and order.userId exists
+    if ((!customerEmail || !customerEmail.includes("@")) && order.userId && !order.userId.startsWith("00000000")) {
+      try {
+        const dbUser = await db.user.findUnique({
+          where: { id: order.userId },
+          select: { email: true },
+        });
+        if (dbUser?.email && dbUser.email.includes("@")) {
+          customerEmail = dbUser.email;
+        }
+      } catch (err: any) {
+        console.warn("[NotificationService] User email fallback query warning:", err?.message);
+      }
+    }
 
     const orderId = order.id || order.orderNumber;
     const isCod = order.paymentMethod === "COD";
