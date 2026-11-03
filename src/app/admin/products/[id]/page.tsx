@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { INITIAL_TAXONOMY_CATEGORIES, CategoryOption } from "@/lib/catalog/category-constants";
 
 interface VariantDetail {
   id: string;
@@ -26,12 +27,6 @@ interface ImageDetail {
   altText: string;
   isPrimary: boolean;
   sortOrder: number;
-}
-
-interface CategoryOption {
-  id: number;
-  name: string;
-  subcategories?: { id: number; name: string }[];
 }
 
 interface ProductDetail {
@@ -89,8 +84,8 @@ export default function AdminProductEditorPage() {
   const [metaDescription, setMetaDescription] = useState("");
 
   // Category Taxonomy State
-  const [categories, setCategories] = useState<CategoryOption[]>([]);
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [categories, setCategories] = useState<CategoryOption[]>(INITIAL_TAXONOMY_CATEGORIES);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
   // Modal State for Variant Creation/Editing
@@ -498,21 +493,16 @@ export default function AdminProductEditorPage() {
               disabled={isLoadingCategories}
               className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium focus:outline-none focus:border-amber-500 disabled:opacity-60"
             >
-              {isLoadingCategories ? (
-                <option value="">⏳ Loading categories...</option>
-              ) : categories.length === 0 ? (
-                <option value={product?.category?.id || ""}>{product?.category?.name || "No categories found"}</option>
-              ) : (
-                categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))
-              )}
+              <option value="">Select Primary Category</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
             {categoryError && (
-              <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-medium">
-                <span>⚠️</span> {categoryError}
+              <p className="text-[11px] text-amber-700 mt-1 flex items-center gap-1 font-medium">
+                <span>ℹ️</span> {categoryError} (Using standard category taxonomy)
               </p>
             )}
           </div>

@@ -54,86 +54,100 @@ export default function WishlistPage() {
       setIsLoading(true);
       setErrorMessage(null);
 
-      // Check auth status
-      const authRes = await fetch("/api/v1/auth/me").catch(() => null);
-      const isAuth = Boolean(authRes && authRes.ok);
-      setIsAuthenticated(isAuth);
+      // 1. Check server-side authenticated wishlist first
+      const res = await fetch("/api/v1/wishlist/items", { cache: "no-store" }).catch(() => null);
 
-      if (isAuth) {
-        // Sync any local wishlist items to server
+      if (res && res.ok) {
+        setIsAuthenticated(true);
+        const json = await res.json();
+        const serverItems: WishlistProduct[] = Array.isArray(json.data) ? json.data : (json.data?.items || []);
+
+        // Migrate any unauthenticated local items to server
         try {
           const localSaved = localStorage.getItem("fn_wishlist");
           if (localSaved) {
             const localList: string[] = JSON.parse(localSaved);
             if (Array.isArray(localList) && localList.length > 0) {
-              for (const slugOrId of localList) {
-                await fetch("/api/v1/wishlist/items", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ variantId: slugOrId, slug: slugOrId }),
-                }).catch(() => null);
+              const serverSlugs = new Set(serverItems.map((i) => i.slug));
+              const serverVariantIds = new Set(serverItems.map((i) => i.variantId));
+              const unsynced = localList.filter((s) => !serverSlugs.has(s) && !serverVariantIds.has(s));
+
+              if (unsynced.length > 0) {
+                for (const slugOrId of unsynced) {
+                  await fetch("/api/v1/wishlist/items", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ variantId: slugOrId, slug: slugOrId }),
+                  }).catch(() => null);
+                }
+
+                // Re-fetch authoritative items after sync
+                const reRes = await fetch("/api/v1/wishlist/items", { cache: "no-store" });
+                if (reRes.ok) {
+                  const reJson = await reRes.json();
+                  const updatedList: WishlistProduct[] = Array.isArray(reJson.data) ? reJson.data : (reJson.data?.items || []);
+                  setItems(updatedList);
+                  try {
+                    localStorage.setItem("fn_wishlist", JSON.stringify(updatedList.map((i) => i.slug)));
+                  } catch {}
+                  return;
+                }
               }
             }
           }
         } catch {}
 
-        // Fetch authoritative server wishlist
-        const res = await fetch("/api/v1/wishlist", { cache: "no-store" });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && json.data) {
-            const rawList: WishlistProduct[] = Array.isArray(json.data) ? json.data : (json.data.items || []);
-            setItems(rawList);
-            // Update local storage to match
-            try {
-              localStorage.setItem("fn_wishlist", JSON.stringify(rawList.map((i) => i.slug)));
-            } catch {}
-            return;
-          }
-        }
+        setItems(serverItems);
+        try {
+          localStorage.setItem("fn_wishlist", JSON.stringify(serverItems.map((i) => i.slug)));
+        } catch {}
+        return;
       }
 
-      // Guest / Fallback localStorage mode
+      // 2. Unauthenticated / Guest fallback mode
+      setIsAuthenticated(false);
       try {
         const localSaved = localStorage.getItem("fn_wishlist");
         if (localSaved) {
           const localList: string[] = JSON.parse(localSaved);
-          const matched = STOREFRONT_PRODUCTS.filter(
-            (p) => localList.includes(p.slug) || localList.includes(p.id)
-          ).map((p) => {
-            const variant = p.variants?.[0];
-            const currentPrice = variant ? variant.sellingPrice : (p.priceRange?.minSellingPrice ?? 0);
-            const currentMrp = variant ? variant.mrp : (p.priceRange?.minMrp ?? currentPrice);
-            const discountPercentage = currentMrp > currentPrice ? Math.round(((currentMrp - currentPrice) / currentMrp) * 100) : 0;
-            return {
-              id: p.id,
-              variantId: variant?.id || p.id,
-              productId: p.id,
-              name: p.name,
-              slug: p.slug,
-              sku: variant?.sku || p.slug,
-              weightGrams: variant?.weightGrams || 500,
-              unit: variant?.unit || "g",
-              packageType: variant?.packageType || "Pouch",
-              primaryImageUrl: p.primaryImage?.imageUrl || "/images/products/royal-afghan-figs.jpg",
-              mrp: currentMrp,
-              sellingPrice: currentPrice,
-              discountPercentage,
-              stockAvailable: 50,
-              stockStatus: p.stockStatus || "IN_STOCK",
-              isAvailable: p.stockStatus !== "OUT_OF_STOCK",
-            };
-          });
-          setItems(matched);
-        } else {
-          setItems([]);
+          if (Array.isArray(localList) && localList.length > 0) {
+            const matched = STOREFRONT_PRODUCTS.filter(
+              (p) => localList.includes(p.slug) || localList.includes(p.id)
+            ).map((p) => {
+              const variant = p.variants?.[0];
+              const currentPrice = variant ? variant.sellingPrice : (p.priceRange?.minSellingPrice ?? 0);
+              const currentMrp = variant ? variant.mrp : (p.priceRange?.minMrp ?? currentPrice);
+              const discountPercentage = currentMrp > currentPrice ? Math.round(((currentMrp - currentPrice) / currentMrp) * 100) : 0;
+              return {
+                id: p.id,
+                variantId: variant?.id || p.id,
+                productId: p.id,
+                name: p.name,
+                slug: p.slug,
+                sku: variant?.sku || p.slug,
+                weightGrams: variant?.weightGrams || 500,
+                unit: variant?.unit || "g",
+                packageType: variant?.packageType || "Pouch",
+                primaryImageUrl: p.primaryImage?.imageUrl || "/images/products/royal-afghan-figs.jpg",
+                mrp: currentMrp,
+                sellingPrice: currentPrice,
+                discountPercentage,
+                stockAvailable: 50,
+                stockStatus: p.stockStatus || "IN_STOCK",
+                isAvailable: p.stockStatus !== "OUT_OF_STOCK",
+              };
+            });
+            setItems(matched);
+            return;
+          }
         }
+        setItems([]);
       } catch {
         setItems([]);
       }
     } catch (err: any) {
       console.error("Failed to load wishlist:", err);
-      setErrorMessage("Unable to retrieve saved items. Please check your network and retry.");
+      setErrorMessage("Unable to retrieve saved items. Please check your connection and retry.");
     } finally {
       setIsLoading(false);
     }

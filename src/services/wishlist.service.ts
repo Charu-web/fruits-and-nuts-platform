@@ -1,10 +1,30 @@
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { AppError } from "@/lib/errors";
 import { runTransaction } from "@/database/transactions";
 import { InventoryService } from "./inventory.service";
 import { CartService } from "./cart.service";
 import { AddToWishlistSchema, MoveToCartSchema } from "@/lib/validation/cart.schema";
+import { getProductImageUrl } from "@/lib/catalog/product-asset-registry";
+import { STOREFRONT_PRODUCTS } from "@/lib/catalog/storefront-catalog";
 import { z } from "zod";
+
+function resolveVariantIdentifiers(idOrSlug: string): { sku?: string; slug?: string } {
+  const sfProduct = STOREFRONT_PRODUCTS.find(
+    (p) =>
+      p.id === idOrSlug ||
+      p.slug === idOrSlug ||
+      p.variants?.some((v) => v.id === idOrSlug || v.sku === idOrSlug)
+  );
+  if (sfProduct) {
+    const sfVariant = sfProduct.variants?.find((v) => v.id === idOrSlug || v.sku === idOrSlug);
+    return {
+      slug: sfProduct.slug,
+      sku: sfVariant?.sku,
+    };
+  }
+  return {};
+}
 
 export interface FormattedWishlistItem {
   id: string;
@@ -74,7 +94,7 @@ export class WishlistService {
         weightGrams: Number(variant.weightGrams),
         unit: variant.unit,
         packageType: variant.packageType,
-        primaryImageUrl: product.images[0]?.imageUrl ?? null,
+        primaryImageUrl: product.images[0]?.imageUrl ?? getProductImageUrl(product.slug) ?? null,
         mrp,
         sellingPrice,
         discountPercentage,
@@ -109,12 +129,17 @@ export class WishlistService {
     }
 
     if (!variant) {
+      const sf = resolveVariantIdentifiers(variantId);
+      const effectiveSlug = slug || sf.slug || variantId;
+      const effectiveSku = sf.sku;
+
       // Look up by SKU, product slug, or productId
       variant = await db.productVariant.findFirst({
         where: {
           OR: [
             { sku: variantId },
-            ...(slug ? [{ product: { slug } }] : [{ product: { slug: variantId } }]),
+            ...(effectiveSku ? [{ sku: effectiveSku }] : []),
+            { product: { slug: effectiveSlug } },
             ...(productId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId)
               ? [{ productId }]
               : []),
@@ -150,27 +175,49 @@ export class WishlistService {
   /**
    * Removes an item from the customer's wishlist.
    */
-  static async removeItem(userId: string, variantId: string) {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(variantId);
-    let targetVariantId = variantId;
+  static async removeItem(userId: string, variantIdOrSlug: string) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(variantIdOrSlug);
+    let targetVariantId: string | null = isUuid ? variantIdOrSlug : null;
 
-    if (!isUuid) {
+    const sf = resolveVariantIdentifiers(variantIdOrSlug);
+    const effectiveSlug = sf.slug || variantIdOrSlug;
+    const effectiveSku = sf.sku;
+
+    if (!targetVariantId) {
       const v = await db.productVariant.findFirst({
-        where: { OR: [{ sku: variantId }, { product: { slug: variantId } }] },
+        where: {
+          OR: [
+            { sku: variantIdOrSlug },
+            ...(effectiveSku ? [{ sku: effectiveSku }] : []),
+            { product: { slug: effectiveSlug } },
+          ],
+        },
         select: { id: true },
       });
       if (v) targetVariantId = v.id;
     }
 
-    await db.wishlist.deleteMany({
-      where: {
-        userId,
-        OR: [
-          { variantId: targetVariantId },
-          ...(isUuid ? [{ id: variantId }] : []),
-        ],
-      },
-    });
+    const deleteConditions: Prisma.WishlistWhereInput[] = [];
+    if (targetVariantId) {
+      deleteConditions.push({ variantId: targetVariantId });
+    }
+    if (isUuid) {
+      deleteConditions.push({ id: variantIdOrSlug });
+    }
+    if (!isUuid) {
+      deleteConditions.push({ variant: { product: { slug: effectiveSlug } } });
+      if (effectiveSku) deleteConditions.push({ variant: { sku: effectiveSku } });
+      deleteConditions.push({ variant: { sku: variantIdOrSlug } });
+    }
+
+    if (deleteConditions.length > 0) {
+      await db.wishlist.deleteMany({
+        where: {
+          userId,
+          OR: deleteConditions,
+        },
+      });
+    }
 
     return await this.getWishlist(userId);
   }
@@ -178,11 +225,46 @@ export class WishlistService {
   /**
    * Checks if a variant is present in the customer's wishlist.
    */
-  static async isInWishlist(userId: string, variantId: string): Promise<boolean> {
+  static async isInWishlist(userId: string, variantIdOrSlug: string): Promise<boolean> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(variantIdOrSlug);
+    let targetVariantId: string | null = isUuid ? variantIdOrSlug : null;
+
+    const sf = resolveVariantIdentifiers(variantIdOrSlug);
+    const effectiveSlug = sf.slug || variantIdOrSlug;
+    const effectiveSku = sf.sku;
+
+    if (!targetVariantId) {
+      const v = await db.productVariant.findFirst({
+        where: {
+          OR: [
+            { sku: variantIdOrSlug },
+            ...(effectiveSku ? [{ sku: effectiveSku }] : []),
+            { product: { slug: effectiveSlug } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (v) targetVariantId = v.id;
+    }
+
+    if (!targetVariantId) {
+      const count = await db.wishlist.count({
+        where: {
+          userId,
+          OR: [
+            { variant: { product: { slug: effectiveSlug } } },
+            ...(effectiveSku ? [{ variant: { sku: effectiveSku } }] : []),
+            { variant: { sku: variantIdOrSlug } },
+          ],
+        },
+      });
+      return count > 0;
+    }
+
     const count = await db.wishlist.count({
       where: {
         userId,
-        variantId,
+        variantId: targetVariantId,
       },
     });
     return count > 0;
@@ -196,33 +278,50 @@ export class WishlistService {
     const { variantId, quantity } = validated;
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(variantId);
-    let targetVariantId = variantId;
+    let targetVariantId: string | null = isUuid ? variantId : null;
 
-    if (!isUuid) {
+    const sf = resolveVariantIdentifiers(variantId);
+    const effectiveSlug = sf.slug || variantId;
+    const effectiveSku = sf.sku;
+
+    if (!targetVariantId) {
       const v = await db.productVariant.findFirst({
-        where: { OR: [{ sku: variantId }, { product: { slug: variantId } }] },
+        where: {
+          OR: [
+            { sku: variantId },
+            ...(effectiveSku ? [{ sku: effectiveSku }] : []),
+            { product: { slug: effectiveSlug } },
+          ],
+        },
         select: { id: true },
       });
       if (v) targetVariantId = v.id;
     }
 
-    return await runTransaction(async () => {
+    if (!targetVariantId) {
+      throw AppError.notFound("Product variant not found to move to cart.");
+    }
+
+    return await runTransaction(async (tx) => {
       // 1. Add to cart with full stock and active validation
-      const cart = await CartService.addItem(userId, { variantId: targetVariantId, quantity });
+      const cart = await CartService.addItem(userId, { variantId: targetVariantId!, quantity });
 
       // 2. Remove from wishlist if present
-      await db.wishlist.deleteMany({
+      await tx.wishlist.deleteMany({
         where: {
           userId,
           OR: [
-            { variantId: targetVariantId },
+            { variantId: targetVariantId! },
             ...(isUuid ? [{ variantId }] : []),
+            ...(!isUuid ? [{ variant: { product: { slug: effectiveSlug } } }, ...(effectiveSku ? [{ variant: { sku: effectiveSku } }] : [])] : []),
           ],
         },
       });
 
       return {
         cart,
+        cartItemId: cart.items.find((i: any) => i.variantId === targetVariantId)?.id,
+        removedFromWishlist: true,
         message: "Item moved to cart successfully",
       };
     });

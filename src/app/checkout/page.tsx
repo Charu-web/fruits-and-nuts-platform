@@ -125,6 +125,7 @@ export default function CheckoutPage() {
             companyName: includeGstInvoice ? form.companyName : undefined,
           },
           paymentMethod: "COD",
+          idempotencyKey: `idem-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           giftWrapEnabled: cart?.summary?.giftWrapEnabled || false,
           giftMessage: cart?.summary?.giftMessage || undefined,
           items: items.map((i) => ({

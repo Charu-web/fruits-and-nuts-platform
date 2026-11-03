@@ -198,30 +198,7 @@ export function SommelierConcierge() {
 
   return (
     <>
-      {/* Floating Trigger Pill */}
-      {!isOpen && (
-        <button
-          type="button"
-          onClick={() => setIsOpen(true)}
-          className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2.5 px-4 py-3 bg-[#173D2C] text-[#FAF7F0] rounded-full shadow-2xl border-2 border-[#B89453]/60 hover:bg-[#102C21] hover:scale-105 transition-all duration-300 group cursor-pointer"
-          aria-label="Open Royal Sommelier Assistant"
-        >
-          <div className="w-6 h-6 rounded-full bg-[#B89453]/20 flex items-center justify-center text-[#B89453]">
-            <Crown className="w-3.5 h-3.5" />
-          </div>
-          <div className="flex flex-col text-left">
-            <span className="text-[11px] font-bold tracking-wider uppercase text-[#FAF7F0] flex items-center gap-1">
-              <span>Ask Sommelier</span>
-              <Sparkles className="w-3 h-3 text-[#B89453]" />
-            </span>
-            <span className="text-[9px] text-[#DDD2BF] hidden sm:inline">
-              Luxury Advisory &amp; Pairings
-            </span>
-          </div>
-        </button>
-      )}
-
-      {/* Sommelier Dialog Window */}
+      {/* Sommelier Dialog Window (Triggered intentionally via Header concierge or keyboard) */}
       {isOpen && (
         <div
           role="dialog"

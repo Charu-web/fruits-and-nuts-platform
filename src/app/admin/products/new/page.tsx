@@ -3,17 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-interface Category {
-  id: number;
-  name: string;
-  subcategories?: { id: number; name: string }[];
-}
+import { INITIAL_TAXONOMY_CATEGORIES, CategoryOption } from "@/lib/catalog/category-constants";
 
 export default function AdminNewProductPage() {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [categories, setCategories] = useState<CategoryOption[]>(INITIAL_TAXONOMY_CATEGORIES);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -22,7 +17,7 @@ export default function AdminNewProductPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [skuBase, setSkuBase] = useState("");
-  const [categoryId, setCategoryId] = useState<number | "">("");
+  const [categoryId, setCategoryId] = useState<number | "">(INITIAL_TAXONOMY_CATEGORIES[0].id);
   const [subcategoryId, setSubcategoryId] = useState<number | "">("");
   const [description, setDescription] = useState("");
   const [ingredients, setIngredients] = useState("");
@@ -303,21 +298,16 @@ export default function AdminNewProductPage() {
                 disabled={isLoadingCategories}
                 className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium focus:outline-none focus:border-amber-500 disabled:opacity-60"
               >
-                {isLoadingCategories ? (
-                  <option value="">⏳ Loading categories...</option>
-                ) : categories.length === 0 ? (
-                  <option value="">⚠️ No categories found</option>
-                ) : (
-                  categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
+                <option value="">Select Primary Category</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
               </select>
               {categoryError && (
-                <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-medium">
-                  <span>⚠️</span> {categoryError}
+                <p className="text-[11px] text-amber-700 mt-1 flex items-center gap-1 font-medium">
+                  <span>ℹ️</span> {categoryError} (Using standard category taxonomy)
                 </p>
               )}
             </div>
@@ -329,11 +319,11 @@ export default function AdminNewProductPage() {
               <select
                 value={subcategoryId}
                 onChange={(e) => setSubcategoryId(e.target.value ? Number(e.target.value) : "")}
-                disabled={isLoadingCategories || subcategories.length === 0}
+                disabled={subcategories.length === 0}
                 className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium focus:outline-none focus:border-amber-500 disabled:opacity-50"
               >
                 <option value="">
-                  {subcategories.length === 0 ? "None available" : "-- Select Subcategory --"}
+                  {subcategories.length === 0 ? "None / Direct Category" : "-- Select Subcategory --"}
                 </option>
                 {subcategories.map((sub) => (
                   <option key={sub.id} value={sub.id}>

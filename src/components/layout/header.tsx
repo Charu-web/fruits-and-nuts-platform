@@ -42,8 +42,19 @@ export function Header() {
   const [wishlistCount, setWishlistCount] = useState(0);
 
   useEffect(() => {
-    function updateWishlistCount() {
+    async function updateWishlistCount() {
       try {
+        const res = await fetch("/api/v1/wishlist/items", { cache: "no-store" }).catch(() => null);
+        if (res && res.ok) {
+          const json = await res.json();
+          const items = Array.isArray(json.data) ? json.data : (json.data?.items || []);
+          setWishlistCount(items.length);
+          try {
+            localStorage.setItem("fn_wishlist", JSON.stringify(items.map((i: any) => i.slug)));
+          } catch {}
+          return;
+        }
+
         const saved = localStorage.getItem("fn_wishlist");
         if (saved) {
           const list: string[] = JSON.parse(saved);
@@ -191,15 +202,15 @@ export function Header() {
 
             {/* Right: Utility Actions (Search, Account, Wishlist, Cart) */}
             <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
-              {/* AI Sommelier Quick Trigger */}
+              {/* Gourmet Concierge Advisory Trigger */}
               <button
                 type="button"
                 onClick={() => window.dispatchEvent(new CustomEvent("open-sommelier"))}
-                className="hidden md:inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#FAF7F0] bg-[#173D2C] hover:bg-[#102C21] px-3 py-1.5 rounded-full border border-[#B89453]/60 transition-all cursor-pointer shadow-xs"
-                title="Consult Royal Gourmet Sommelier AI Concierge"
+                className="hidden md:inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#987B3E] px-3 py-1.5 rounded-full bg-[#FAF7F0] border border-[#B89453]/40 hover:border-[#B89453] transition-all cursor-pointer"
+                title="Gourmet Concierge & Advisory"
               >
                 <Sparkles className="w-3.5 h-3.5 text-[#B89453]" />
-                <span>Ask Sommelier</span>
+                <span>Concierge</span>
               </button>
 
               {/* Search Trigger Button with shortcut pill */}
