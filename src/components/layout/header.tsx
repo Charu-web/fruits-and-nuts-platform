@@ -115,8 +115,8 @@ export function Header() {
     <>
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E5DEC9] transition-all">
         {/* Main Header Bar */}
-        <div className="max-w-[1440px] 2xl:max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20 gap-4 lg:gap-6">
+        <div className="max-w-[1440px] 2xl:max-w-[1600px] w-full mx-auto px-2.5 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-20 gap-1.5 sm:gap-4 lg:gap-6">
             {/* Left: Mobile Menu Trigger (Mobile only) */}
             <div className="flex items-center lg:hidden shrink-0">
               <button
@@ -125,12 +125,12 @@ export function Header() {
                 aria-label="Toggle navigation menu"
                 aria-expanded={isMobileMenuOpen}
                 aria-controls="mobile-navigation-drawer"
-                className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 text-[#173D2C] hover:text-[#B89453] focus:outline-none transition-colors cursor-pointer rounded-lg hover:bg-[#FAF7F0] touch-manipulation"
+                className="min-w-[38px] min-h-[38px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center p-1.5 sm:p-2 text-[#173D2C] hover:text-[#B89453] focus:outline-none transition-colors cursor-pointer rounded-lg hover:bg-[#FAF7F0] touch-manipulation"
               >
                 {isMobileMenuOpen ? (
-                  <X className="w-6 h-6" />
+                  <X className="w-5 h-5 sm:w-6 sm:h-6" />
                 ) : (
-                  <Menu className="w-6 h-6" />
+                  <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
                 )}
               </button>
             </div>
@@ -142,17 +142,17 @@ export function Header() {
                 className="flex flex-col items-start group shrink-0 select-none py-1"
                 aria-label="Fruits & Nuts Home"
               >
-                <div className="flex items-center gap-2 sm:gap-2.5">
+                <div className="flex items-center gap-1.5 sm:gap-2.5">
                   <img
                     src="/images/logo.jpg"
                     alt="Fruits & Nuts Official Logo"
-                    className="h-8 sm:h-9 w-auto object-contain rounded-md bg-white px-1 py-0.5 border border-[#B89453]/60 shadow-xs group-hover:border-[#B89453] group-hover:scale-105 transition-all shrink-0"
+                    className="h-7 sm:h-9 w-auto object-contain rounded-md bg-white px-1 py-0.5 border border-[#B89453]/60 shadow-xs group-hover:border-[#B89453] group-hover:scale-105 transition-all shrink-0"
                   />
-                  <span className="font-serif text-lg sm:text-xl font-bold tracking-[0.08em] text-[#173D2C] group-hover:text-[#987B3E] transition-colors leading-none whitespace-nowrap">
+                  <span className="font-serif text-base sm:text-xl font-bold tracking-[0.06em] sm:tracking-[0.08em] text-[#173D2C] group-hover:text-[#987B3E] transition-colors leading-none whitespace-nowrap">
                     FRUITS &amp; NUTS
                   </span>
                 </div>
-                <span className="text-[9px] sm:text-[10px] tracking-[0.2em] uppercase text-[#7E5E1E] font-bold whitespace-nowrap pt-1 pl-0.5">
+                <span className="text-[8px] sm:text-[10px] tracking-[0.16em] sm:tracking-[0.2em] uppercase text-[#7E5E1E] font-bold whitespace-nowrap pt-1 pl-0.5">
                   Nutrition with an Emotion
                 </span>
               </Link>
@@ -225,7 +225,7 @@ export function Header() {
                 type="button"
                 onClick={() => setIsSearchModalOpen(true)}
                 aria-label="Search gourmet harvests"
-                className="min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center gap-1.5 sm:gap-2 p-1.5 sm:px-3 sm:py-1.5 text-[#173D2C] hover:text-[#B89453] rounded-full hover:bg-[#FAF7F0] transition-colors cursor-pointer border border-transparent sm:border-[#E5DEC9] touch-manipulation"
+                className="min-w-[36px] min-h-[36px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center gap-1.5 sm:gap-2 p-1.5 sm:px-3 sm:py-1.5 text-[#173D2C] hover:text-[#B89453] rounded-full hover:bg-[#FAF7F0] transition-colors cursor-pointer border border-transparent sm:border-[#E5DEC9] touch-manipulation"
               >
                 <Search className="w-4 h-4 sm:w-4 sm:h-4" />
                 <span className="hidden sm:inline text-xs text-[#5F6D65]">Search...</span>
@@ -238,7 +238,7 @@ export function Header() {
               <Link
                 href="/login"
                 aria-label="Customer Account"
-                className="min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center p-1.5 sm:p-2 text-[#173D2C] hover:text-[#B89453] transition-colors rounded-full hover:bg-[#FAF7F0] cursor-pointer touch-manipulation"
+                className="min-w-[36px] min-h-[36px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center p-1.5 sm:p-2 text-[#173D2C] hover:text-[#B89453] transition-colors rounded-full hover:bg-[#FAF7F0] cursor-pointer touch-manipulation"
               >
                 <User className="w-5 h-5" />
               </Link>
@@ -262,7 +262,7 @@ export function Header() {
                 type="button"
                 onClick={toggleDrawer}
                 aria-label={`Open shopping cart with ${summary.itemCount} items`}
-                className="min-h-[40px] sm:min-h-[44px] flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 bg-[#173D2C] text-[#FAF7F0] rounded-full hover:bg-[#102C21] border border-[#B89453]/40 transition-all shadow-xs group cursor-pointer ml-0.5 touch-manipulation"
+                className="min-h-[36px] sm:min-h-[44px] flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-1.5 bg-[#173D2C] text-[#FAF7F0] rounded-full hover:bg-[#102C21] border border-[#B89453]/40 transition-all shadow-xs group cursor-pointer ml-0.5 touch-manipulation"
               >
                 <ShoppingBag className="w-4 h-4 text-[#D4B776]" />
                 <span className="text-xs font-bold text-[#D4B776]">{summary.itemCount}</span>
