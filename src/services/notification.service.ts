@@ -504,7 +504,7 @@ Outbound customer email verification, password reset, and COD order confirmation
       await this.dispatchViaSmtp({
         host,
         port,
-        secure: process.env.SMTP_SECURE === "true" || port === 465,
+        secure: port === 465 || (process.env.SMTP_SECURE === "true" && port !== 587 && port !== 25),
         user,
         pass,
         from: this.getSenderAddress(),
