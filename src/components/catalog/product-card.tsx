@@ -75,22 +75,44 @@ export function ProductCard({
     }
   }, [id, slug]);
 
-  const toggleWishlist = (e: React.MouseEvent) => {
+  const toggleWishlist = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    const targetVariantId = variants[selectedVariantIndex]?.id || id;
+    const willBeWishlisted = !isWishlisted;
+
+    // 1. Optimistic UI update
+    setIsWishlisted(willBeWishlisted);
+
+    // 2. Synchronize localStorage
     try {
       const saved = localStorage.getItem("fn_wishlist");
       let list: string[] = saved ? JSON.parse(saved) : [];
-      if (isWishlisted) {
-        list = list.filter((item) => item !== id && item !== slug);
-        setIsWishlisted(false);
+      if (!willBeWishlisted) {
+        list = list.filter((item) => item !== id && item !== slug && item !== targetVariantId);
       } else {
-        list.push(slug);
-        setIsWishlisted(true);
+        if (!list.includes(slug)) list.push(slug);
       }
       localStorage.setItem("fn_wishlist", JSON.stringify(list));
-    } catch {
-      setIsWishlisted(!isWishlisted);
+      window.dispatchEvent(new CustomEvent("wishlist-updated"));
+    } catch {}
+
+    // 3. Synchronize with backend database if authenticated
+    try {
+      if (willBeWishlisted) {
+        await fetch("/api/v1/wishlist/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ variantId: targetVariantId, slug, productId: id }),
+        });
+      } else {
+        await fetch(`/api/v1/wishlist/items/${targetVariantId}`, {
+          method: "DELETE",
+        });
+      }
+      window.dispatchEvent(new CustomEvent("wishlist-updated"));
+    } catch (err) {
+      console.warn("[ProductCard] Wishlist backend sync note (unauthenticated/offline):", err);
     }
   };
 

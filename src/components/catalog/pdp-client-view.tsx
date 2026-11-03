@@ -15,6 +15,7 @@ import {
   MapPin,
   X,
   MessageCircle,
+  Heart,
 } from "lucide-react";
 import { useCart } from "@/components/cart/cart-context";
 import {
@@ -111,6 +112,56 @@ export function PDPClientView({ product }: { product: PDPProductData }) {
   const [newReviewText, setNewReviewText] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewSubmitMessage, setReviewSubmitMessage] = useState<string | null>(null);
+
+  // Wishlist State
+  const [isWishlisted, setIsWishlisted] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("fn_wishlist");
+      if (saved) {
+        const list: string[] = JSON.parse(saved);
+        if (list.includes(product.id) || list.includes(product.slug)) {
+          setIsWishlisted(true);
+        }
+      }
+    } catch {}
+  }, [product.id, product.slug]);
+
+  const handleToggleWishlist = async () => {
+    const targetVariantId = selectedVariant?.id || product.id;
+    const willBeWishlisted = !isWishlisted;
+    setIsWishlisted(willBeWishlisted);
+
+    try {
+      const saved = localStorage.getItem("fn_wishlist");
+      let list: string[] = saved ? JSON.parse(saved) : [];
+      if (!willBeWishlisted) {
+        list = list.filter((item) => item !== product.id && item !== product.slug && item !== targetVariantId);
+      } else {
+        if (!list.includes(product.slug)) list.push(product.slug);
+      }
+      localStorage.setItem("fn_wishlist", JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent("wishlist-updated"));
+    } catch {}
+
+    try {
+      if (willBeWishlisted) {
+        await fetch("/api/v1/wishlist/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ variantId: targetVariantId, slug: product.slug, productId: product.id }),
+        });
+      } else {
+        await fetch(`/api/v1/wishlist/items/${targetVariantId}`, {
+          method: "DELETE",
+        });
+      }
+      window.dispatchEvent(new CustomEvent("wishlist-updated"));
+    } catch (err) {
+      console.warn("[PDPClientView] Wishlist sync note:", err);
+    }
+  };
 
   // Cart action state
   const [isAddingToCart, setIsAddingToCart] = useState(false);
@@ -522,6 +573,19 @@ export function PDPClientView({ product }: { product: PDPProductData }) {
                     <span>Add to Bag</span>
                   </>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleWishlist}
+                aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+                className={`w-12 h-12 rounded-md border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                  isWishlisted
+                    ? "bg-rose-50 border-rose-300 text-rose-600 shadow-2xs"
+                    : "bg-white border-[#E5DEC9] text-[#173D2C] hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50/50"
+                }`}
+              >
+                <Heart className={`w-5 h-5 ${isWishlisted ? "fill-rose-500 text-rose-500" : ""}`} />
               </button>
             </div>
 

@@ -1095,15 +1095,76 @@ export class OrderService {
     const skip = (page - 1) * limit;
 
     try {
+      // 1. Fetch authenticated user details to link existing unlinked/guest orders
+      let customerUser: { id: string; email: string | null; phone: string | null } | null = null;
+      const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      if (isUserUuid) {
+        try {
+          customerUser = await db.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, phone: true },
+          });
+        } catch {}
+      }
+
+      // 2. Associate existing guest orders matching this customer's email or phone
+      if (customerUser && (customerUser.email || customerUser.phone)) {
+        try {
+          const conditions: Prisma.OrderWhereInput[] = [];
+          if (customerUser.email) {
+            conditions.push({ customerEmail: { equals: customerUser.email.trim().toLowerCase(), mode: "insensitive" } });
+          }
+          if (customerUser.phone) {
+            const cleanPhone = customerUser.phone.replace(/\D/g, "");
+            conditions.push({ customerPhone: { contains: cleanPhone.slice(-10) } });
+          }
+          if (conditions.length > 0) {
+            await db.order.updateMany({
+              where: {
+                userId: { not: userId },
+                OR: conditions,
+              },
+              data: { userId },
+            });
+          }
+        } catch (linkErr: any) {
+          console.warn("[OrderService:listCustomerOrders] Guest order association note:", linkErr?.message);
+        }
+      }
+
+      // 3. Build customer query filter (scoped strictly to this user's ID or verified contact)
+      const userFilters: Prisma.OrderWhereInput[] = [{ userId }];
+      if (customerUser?.email) {
+        userFilters.push({ customerEmail: { equals: customerUser.email.trim().toLowerCase(), mode: "insensitive" } });
+      }
+      if (customerUser?.phone) {
+        const cleanPhone = customerUser.phone.replace(/\D/g, "");
+        userFilters.push({ customerPhone: { contains: cleanPhone.slice(-10) } });
+      }
+
+      const whereClause: Prisma.OrderWhereInput = { OR: userFilters };
+
       const [total, orders] = await Promise.all([
-        db.order.count({ where: { userId } }),
+        db.order.count({ where: whereClause }),
         db.order.findMany({
-          where: { userId },
+          where: whereClause,
           skip,
           take: limit,
           orderBy: { createdAt: "desc" },
           include: {
-            items: true,
+            items: {
+              include: {
+                product: {
+                  include: {
+                    images: {
+                      orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+                      take: 1,
+                    },
+                  },
+                },
+                variant: true,
+              },
+            },
             shipments: true,
           },
         }),
@@ -1131,22 +1192,33 @@ export class OrderService {
                 estimatedDeliveryDate: primaryShipment.estimatedDeliveryDate,
               }
             : null,
-          items: o.items.map((i) => ({
-            id: i.id,
-            productName: i.productNameSnapshot,
-            sku: i.skuSnapshot,
-            weightGrams: Number(i.weightGramsSnapshot),
-            unitPrice: Number(i.unitPriceSnapshot),
-            quantity: i.quantity,
-            lineTotal: Number(i.lineTotalSnapshot),
-            totalPrice: Number(i.lineTotalSnapshot),
-            variant: {
+          items: o.items.map((i) => {
+            const resolvedImg =
+              i.product?.images?.[0]?.imageUrl ||
+              STOREFRONT_PRODUCTS.find(
+                (sp) => sp.name.toLowerCase() === i.productNameSnapshot.toLowerCase()
+              )?.primaryImage?.imageUrl ||
+              null;
+
+            return {
+              id: i.id,
+              productName: i.productNameSnapshot,
+              sku: i.skuSnapshot,
               weightGrams: Number(i.weightGramsSnapshot),
-              product: {
-                name: i.productNameSnapshot,
+              unitPrice: Number(i.unitPriceSnapshot),
+              quantity: i.quantity,
+              lineTotal: Number(i.lineTotalSnapshot),
+              totalPrice: Number(i.lineTotalSnapshot),
+              productImage: resolvedImg,
+              variant: {
+                weightGrams: Number(i.weightGramsSnapshot),
+                product: {
+                  name: i.productNameSnapshot,
+                  images: resolvedImg ? [{ imageUrl: resolvedImg }] : [],
+                },
               },
-            },
-          })),
+            };
+          }),
         };
       });
 
@@ -1227,13 +1299,25 @@ export class OrderService {
    */
   static async getCustomerOrderById(userId: string, orderIdOrNumber: string) {
     let order: any = null;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdOrNumber);
+
     try {
       order = await db.order.findFirst({
-        where: {
-          OR: [{ id: orderIdOrNumber }, { orderNumber: orderIdOrNumber }],
-        },
+        where: isUuid ? { OR: [{ id: orderIdOrNumber }, { orderNumber: orderIdOrNumber }] } : { orderNumber: orderIdOrNumber },
         include: {
-          items: true,
+          items: {
+            include: {
+              product: {
+                include: {
+                  images: {
+                    orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+                    take: 1,
+                  },
+                },
+              },
+              variant: true,
+            },
+          },
           shipments: true,
           statusHistory: {
             orderBy: { createdAt: "asc" },
@@ -1256,7 +1340,23 @@ export class OrderService {
     }
 
     if (order.userId && order.userId !== userId) {
-      throw AppError.forbidden("Access denied: You can only view orders belonging to your account.");
+      let customer: { email?: string | null; phone?: string | null } | null = null;
+      try {
+        customer = await db.user.findUnique({
+          where: { id: userId },
+          select: { email: true, phone: true },
+        });
+      } catch {}
+      const matchesEmail = customer?.email && order.customerEmail && customer.email.toLowerCase() === order.customerEmail.toLowerCase();
+      const matchesPhone = customer?.phone && order.customerPhone && customer.phone.replace(/\D/g, "").slice(-10) === order.customerPhone.replace(/\D/g, "").slice(-10);
+      if (matchesEmail || matchesPhone) {
+        try {
+          await db.order.update({ where: { id: order.id }, data: { userId } });
+          order.userId = userId;
+        } catch {}
+      } else {
+        throw AppError.forbidden("Access denied: You can only view orders belonging to your account.");
+      }
     }
 
     return {
@@ -1280,19 +1380,32 @@ export class OrderService {
         state: order.shippingState,
         postalCode: order.shippingPostalCode,
       },
-      items: order.items.map((i: any) => ({
-        ...i,
-        weightGramsSnapshot: Number(i.weightGramsSnapshot || i.variant?.weightGrams || 500),
-        unitPriceSnapshot: Number(i.unitPriceSnapshot || i.unitPrice || 0),
-        lineTotalSnapshot: Number(i.lineTotalSnapshot || i.lineTotal || 0),
-        totalPrice: Number(i.lineTotalSnapshot || i.lineTotal || 0),
-        unitPrice: Number(i.unitPriceSnapshot || i.unitPrice || 0),
-        gstRateSnapshot: Number(i.gstRateSnapshot || 0),
-        variant: i.variant || {
-          weightGrams: Number(i.weightGramsSnapshot || 500),
-          product: { name: i.productNameSnapshot || i.productName || "Dry Fruits Reserve" },
-        },
-      })),
+      items: order.items.map((i: any) => {
+        const resolvedImg =
+          i.product?.images?.[0]?.imageUrl ||
+          STOREFRONT_PRODUCTS.find(
+            (sp) => sp.name.toLowerCase() === (i.productNameSnapshot || "").toLowerCase()
+          )?.primaryImage?.imageUrl ||
+          null;
+
+        return {
+          ...i,
+          weightGramsSnapshot: Number(i.weightGramsSnapshot || i.variant?.weightGrams || 500),
+          unitPriceSnapshot: Number(i.unitPriceSnapshot || i.unitPrice || 0),
+          lineTotalSnapshot: Number(i.lineTotalSnapshot || i.lineTotal || 0),
+          totalPrice: Number(i.lineTotalSnapshot || i.lineTotal || 0),
+          unitPrice: Number(i.unitPriceSnapshot || i.unitPrice || 0),
+          gstRateSnapshot: Number(i.gstRateSnapshot || 0),
+          productImage: resolvedImg,
+          variant: i.variant || {
+            weightGrams: Number(i.weightGramsSnapshot || 500),
+            product: {
+              name: i.productNameSnapshot || i.productName || "Dry Fruits Reserve",
+              images: resolvedImg ? [{ imageUrl: resolvedImg }] : [],
+            },
+          },
+        };
+      }),
     };
   }
 
@@ -1301,13 +1414,25 @@ export class OrderService {
    */
   static async getCustomerOrderTracking(userId: string, orderIdOrNumber: string) {
     let order: any = null;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdOrNumber);
+
     try {
       order = await db.order.findFirst({
-        where: {
-          OR: [{ id: orderIdOrNumber }, { orderNumber: orderIdOrNumber }],
-        },
+        where: isUuid ? { OR: [{ id: orderIdOrNumber }, { orderNumber: orderIdOrNumber }] } : { orderNumber: orderIdOrNumber },
         include: {
-          items: true,
+          items: {
+            include: {
+              product: {
+                include: {
+                  images: {
+                    orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+                    take: 1,
+                  },
+                },
+              },
+              variant: true,
+            },
+          },
           shipments: {
             orderBy: { createdAt: "asc" },
           },
@@ -1332,7 +1457,23 @@ export class OrderService {
     }
 
     if (order.userId && order.userId !== userId) {
-      throw AppError.forbidden("Access denied: You can only track orders belonging to your account.");
+      let customer: { email?: string | null; phone?: string | null } | null = null;
+      try {
+        customer = await db.user.findUnique({
+          where: { id: userId },
+          select: { email: true, phone: true },
+        });
+      } catch {}
+      const matchesEmail = customer?.email && order.customerEmail && customer.email.toLowerCase() === order.customerEmail.toLowerCase();
+      const matchesPhone = customer?.phone && order.customerPhone && customer.phone.replace(/\D/g, "").slice(-10) === order.customerPhone.replace(/\D/g, "").slice(-10);
+      if (matchesEmail || matchesPhone) {
+        try {
+          await db.order.update({ where: { id: order.id }, data: { userId } });
+          order.userId = userId;
+        } catch {}
+      } else {
+        throw AppError.forbidden("Access denied: You can only track orders belonging to your account.");
+      }
     }
 
     return buildOrderTrackingPayload(order);
@@ -1347,13 +1488,12 @@ export class OrderService {
     input: z.infer<typeof CancelOrderSchema>
   ) {
     const validated = CancelOrderSchema.parse(input);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdOrNumber);
 
     let order: any = null;
     try {
       order = await db.order.findFirst({
-        where: {
-          OR: [{ id: orderIdOrNumber }, { orderNumber: orderIdOrNumber }],
-        },
+        where: isUuid ? { OR: [{ id: orderIdOrNumber }, { orderNumber: orderIdOrNumber }] } : { orderNumber: orderIdOrNumber },
         include: { items: true },
       });
     } catch {
@@ -1361,7 +1501,23 @@ export class OrderService {
     }
 
     if (order && order.userId && order.userId !== userId) {
-      throw AppError.forbidden("Access denied: You can only cancel orders belonging to your account.");
+      let customer: { email?: string | null; phone?: string | null } | null = null;
+      try {
+        customer = await db.user.findUnique({
+          where: { id: userId },
+          select: { email: true, phone: true },
+        });
+      } catch {}
+      const matchesEmail = customer?.email && order.customerEmail && customer.email.toLowerCase() === order.customerEmail.toLowerCase();
+      const matchesPhone = customer?.phone && order.customerPhone && customer.phone.replace(/\D/g, "").slice(-10) === order.customerPhone.replace(/\D/g, "").slice(-10);
+      if (matchesEmail || matchesPhone) {
+        try {
+          await db.order.update({ where: { id: order.id }, data: { userId } });
+          order.userId = userId;
+        } catch {}
+      } else {
+        throw AppError.forbidden("Access denied: You can only cancel orders belonging to your account.");
+      }
     }
 
     if (!order) {

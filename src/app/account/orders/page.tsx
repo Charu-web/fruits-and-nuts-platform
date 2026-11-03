@@ -10,8 +10,11 @@ interface OrderItem {
   id: string;
   orderNumber: string;
   status: string;
+  orderStatus: string;
   paymentStatus: string;
+  paymentMethod: string;
   totalAmount: number;
+  finalPayableAmount?: number;
   createdAt: string;
   shipment?: {
     courierName?: string | null;
@@ -20,12 +23,16 @@ interface OrderItem {
   } | null;
   items: {
     id: string;
+    productName: string;
     quantity: number;
     totalPrice: number;
-    variant: {
+    unitPrice?: number;
+    productImage?: string | null;
+    variant?: {
       weightGrams: number;
-      product: {
+      product?: {
         name: string;
+        images?: { imageUrl: string }[];
       };
     };
   }[];
@@ -34,6 +41,7 @@ interface OrderItem {
 export default function AccountOrdersPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [cancelModalOrderId, setCancelModalOrderId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("Order created by mistake");
@@ -42,15 +50,23 @@ export default function AccountOrdersPage() {
   const fetchOrders = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch("/api/v1/orders?limit=20");
+      setFetchError(null);
+      const res = await fetch("/api/v1/orders?limit=50", { cache: "no-store" });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          setOrders(json.data.items || []);
+          const rawItems: OrderItem[] = Array.isArray(json.data) ? json.data : (json.data.items || []);
+          setOrders(rawItems);
+        } else {
+          setFetchError(json.error?.message || "Failed to load orders from your account.");
         }
+      } else {
+        const json = await res.json().catch(() => null);
+        setFetchError(json?.error?.message || `Failed to fetch orders (Status ${res.status}).`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch orders", err);
+      setFetchError("Unable to reach the server. Please check your connection and retry.");
     } finally {
       setIsLoading(false);
     }
@@ -100,10 +116,26 @@ export default function AccountOrdersPage() {
           </div>
         )}
 
+        {fetchError && (
+          <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{fetchError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={fetchOrders}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs self-start sm:self-auto cursor-pointer"
+            >
+              Retry Loading
+            </button>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((n) => (
-              <div key={n} className="h-28 bg-[#FAF7F0] rounded-xl animate-pulse" />
+              <div key={n} className="h-32 bg-[#FAF7F0] rounded-xl animate-pulse" />
             ))}
           </div>
         ) : orders.length > 0 ? (
@@ -129,6 +161,9 @@ export default function AccountOrdersPage() {
                         >
                           {order.status}
                         </Badge>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-stone-100 text-stone-700 border border-stone-200">
+                          {order.paymentMethod === "COD" ? "Cash on Delivery" : order.paymentStatus || "PAID"}
+                        </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500 mt-0.5">
                         <span className="inline-flex items-center gap-1">
@@ -147,7 +182,7 @@ export default function AccountOrdersPage() {
 
                     <div className="flex flex-wrap items-center gap-2.5">
                       <span className="font-bold text-[#173D2C] text-base mr-1">
-                        {formatPrice(order.totalAmount)}
+                        {formatPrice(order.finalPayableAmount ?? order.totalAmount)}
                       </span>
                       <Link
                         href={`/account/orders/${order.id}/track`}
@@ -175,16 +210,41 @@ export default function AccountOrdersPage() {
                     </div>
                   </div>
 
-                  {/* Order items list */}
-                  <div className="p-3 bg-[#FAF7F0] rounded-xl space-y-1.5 text-xs border border-[#DCE5D8]/60">
-                    {order.items?.map((item) => (
-                      <div key={item.id} className="flex justify-between text-stone-700">
-                        <span>
-                          {item.quantity}x {item.variant?.product?.name} ({item.variant?.weightGrams}g)
-                        </span>
-                        <span className="font-medium text-stone-900">{formatPrice(item.totalPrice)}</span>
-                      </div>
-                    ))}
+                  {/* Order items list with product thumbnail images */}
+                  <div className="p-3 bg-[#FAF7F0] rounded-xl space-y-2 text-xs border border-[#DCE5D8]/60">
+                    {order.items?.map((item) => {
+                      const img = item.productImage || item.variant?.product?.images?.[0]?.imageUrl || "/images/products/royal-afghan-figs.jpg";
+                      const name = item.productName || item.variant?.product?.name || "Gourmet Reserve";
+                      const weight = item.variant?.weightGrams ? `${item.variant.weightGrams}g` : "";
+
+                      return (
+                        <div key={item.id} className="flex items-center justify-between gap-3 text-stone-700">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-10 h-10 rounded-lg overflow-hidden border border-[#DCE5D8] bg-white shrink-0">
+                              <img
+                                src={img}
+                                alt={name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = "/images/products/royal-afghan-figs.jpg";
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-stone-900 leading-tight">
+                                {item.quantity}x {name} {weight ? `(${weight})` : ""}
+                              </p>
+                              {item.unitPrice && (
+                                <p className="text-[11px] text-stone-500 font-mono">
+                                  ₹{item.unitPrice} each
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <span className="font-bold text-stone-900 whitespace-nowrap">{formatPrice(item.totalPrice)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

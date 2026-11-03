@@ -11,6 +11,7 @@ import {
   LogOut,
   Crown,
   ChevronRight,
+  Heart,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +69,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const navLinks = [
     { href: "/account", label: "Overview", icon: LayoutDashboard },
     { href: "/account/orders", label: "My Orders & Tracking", icon: Package },
+    { href: "/wishlist", label: "My Wishlist", icon: Heart },
     { href: "/account/addresses", label: "Saved Addresses", icon: MapPin },
     { href: "/account/profile", label: "Profile & Security", icon: User },
   ];

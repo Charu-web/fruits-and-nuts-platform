@@ -102,32 +102,33 @@ export default function CustomerOrderTrackingPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<number | null>(null);
 
-  useEffect(() => {
-    async function fetchTracking() {
-      if (!orderId) return;
-      try {
-        setIsLoading(true);
-        setErrorMsg(null);
-        const res = await fetch(`/api/v1/orders/${orderId}/tracking`);
-        const json = await res.json();
-        if (res.ok && json.success && json.data) {
-          setTracking(json.data);
-        } else {
-          setErrorCode(res.status);
-          setErrorMsg(
-            json.error?.message ||
-              (res.status === 403
-                ? "You do not have permission to view tracking for this order."
-                : "Unable to load order tracking details.")
-          );
-        }
-      } catch (err) {
-        console.error("Failed to fetch order tracking:", err);
-        setErrorMsg("Unable to connect to tracking service. Please try again.");
-      } finally {
-        setIsLoading(false);
+  const fetchTracking = async () => {
+    if (!orderId) return;
+    try {
+      setIsLoading(true);
+      setErrorMsg(null);
+      const res = await fetch(`/api/v1/orders/${orderId}/tracking`, { cache: "no-store" });
+      const json = await res.json();
+      if (res.ok && json.success && json.data) {
+        setTracking(json.data);
+      } else {
+        setErrorCode(res.status);
+        setErrorMsg(
+          json.error?.message ||
+            (res.status === 403
+              ? "You do not have permission to view tracking for this order."
+              : "Unable to load order tracking details.")
+        );
       }
+    } catch (err) {
+      console.error("Failed to fetch order tracking:", err);
+      setErrorMsg("Unable to connect to tracking service. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     fetchTracking();
   }, [orderId]);
 
@@ -155,7 +156,14 @@ export default function CustomerOrderTrackingPage() {
         <p className="text-xs text-stone-600 max-w-md mx-auto leading-relaxed">
           {errorMsg || "We could not locate tracking details for this order."}
         </p>
-        <div className="pt-2">
+        <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={fetchTracking}
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#B89453] hover:bg-[#A38042] text-[#173D2C] text-xs font-bold rounded-xl transition-colors cursor-pointer"
+          >
+            <span>Retry Tracking</span>
+          </button>
           <Link
             href="/account/orders"
             className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#173D2C] hover:bg-[#123123] text-white text-xs font-semibold rounded-xl transition-colors"

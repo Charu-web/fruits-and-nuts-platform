@@ -96,12 +96,35 @@ export class WishlistService {
    */
   static async addItem(userId: string, input: z.infer<typeof AddToWishlistSchema>) {
     const validated = AddToWishlistSchema.parse(input);
-    const { variantId } = validated;
+    const { variantId, slug, productId } = validated;
 
-    const variant = await db.productVariant.findUnique({
-      where: { id: variantId },
-      include: { product: true },
-    });
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(variantId);
+    let variant: any = null;
+
+    if (isUuid) {
+      variant = await db.productVariant.findUnique({
+        where: { id: variantId },
+        include: { product: true },
+      });
+    }
+
+    if (!variant) {
+      // Look up by SKU, product slug, or productId
+      variant = await db.productVariant.findFirst({
+        where: {
+          OR: [
+            { sku: variantId },
+            ...(slug ? [{ product: { slug } }] : [{ product: { slug: variantId } }]),
+            ...(productId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId)
+              ? [{ productId }]
+              : []),
+          ],
+          isActive: true,
+          product: { isActive: true },
+        },
+        include: { product: true },
+      });
+    }
 
     if (!variant || !variant.isActive || !variant.product.isActive) {
       throw AppError.notFound("The requested product variant is unavailable.");
@@ -111,13 +134,13 @@ export class WishlistService {
       where: {
         uq_user_wishlist_variant: {
           userId,
-          variantId,
+          variantId: variant.id,
         },
       },
       update: {},
       create: {
         userId,
-        variantId,
+        variantId: variant.id,
       },
     });
 
@@ -128,25 +151,24 @@ export class WishlistService {
    * Removes an item from the customer's wishlist.
    */
   static async removeItem(userId: string, variantId: string) {
-    const existing = await db.wishlist.findUnique({
-      where: {
-        uq_user_wishlist_variant: {
-          userId,
-          variantId,
-        },
-      },
-    });
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(variantId);
+    let targetVariantId = variantId;
 
-    if (!existing) {
-      throw AppError.notFound("Item not found in your wishlist.");
+    if (!isUuid) {
+      const v = await db.productVariant.findFirst({
+        where: { OR: [{ sku: variantId }, { product: { slug: variantId } }] },
+        select: { id: true },
+      });
+      if (v) targetVariantId = v.id;
     }
 
-    await db.wishlist.delete({
+    await db.wishlist.deleteMany({
       where: {
-        uq_user_wishlist_variant: {
-          userId,
-          variantId,
-        },
+        userId,
+        OR: [
+          { variantId: targetVariantId },
+          ...(isUuid ? [{ id: variantId }] : []),
+        ],
       },
     });
 
@@ -173,15 +195,29 @@ export class WishlistService {
     const validated = MoveToCartSchema.parse(input);
     const { variantId, quantity } = validated;
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(variantId);
+    let targetVariantId = variantId;
+
+    if (!isUuid) {
+      const v = await db.productVariant.findFirst({
+        where: { OR: [{ sku: variantId }, { product: { slug: variantId } }] },
+        select: { id: true },
+      });
+      if (v) targetVariantId = v.id;
+    }
+
     return await runTransaction(async () => {
       // 1. Add to cart with full stock and active validation
-      const cart = await CartService.addItem(userId, { variantId, quantity });
+      const cart = await CartService.addItem(userId, { variantId: targetVariantId, quantity });
 
       // 2. Remove from wishlist if present
       await db.wishlist.deleteMany({
         where: {
           userId,
-          variantId,
+          OR: [
+            { variantId: targetVariantId },
+            ...(isUuid ? [{ variantId }] : []),
+          ],
         },
       });
 

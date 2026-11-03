@@ -39,6 +39,26 @@ export function Header() {
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [wishlistCount, setWishlistCount] = useState(0);
+
+  useEffect(() => {
+    function updateWishlistCount() {
+      try {
+        const saved = localStorage.getItem("fn_wishlist");
+        if (saved) {
+          const list: string[] = JSON.parse(saved);
+          setWishlistCount(list.length);
+        } else {
+          setWishlistCount(0);
+        }
+      } catch {
+        setWishlistCount(0);
+      }
+    }
+    updateWishlistCount();
+    window.addEventListener("wishlist-updated", updateWishlistCount);
+    return () => window.removeEventListener("wishlist-updated", updateWishlistCount);
+  }, []);
 
   // Global Keyboard shortcut: Ctrl+K / Cmd+K to open search
   useEffect(() => {
@@ -207,11 +227,16 @@ export function Header() {
 
               {/* Wishlist */}
               <Link
-                href="/shop"
-                aria-label="Saved Wishlist Items"
-                className="p-2 text-[#173D2C] hover:text-[#B89453] transition-colors rounded-full hover:bg-[#FAF7F0] hidden sm:inline-flex cursor-pointer"
+                href="/wishlist"
+                aria-label={`Saved Wishlist Items (${wishlistCount})`}
+                className="relative p-2 text-[#173D2C] hover:text-[#B89453] transition-colors rounded-full hover:bg-[#FAF7F0] hidden sm:inline-flex cursor-pointer"
               >
                 <Heart className="w-5 h-5" />
+                {wishlistCount > 0 && (
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-[#B89453] text-[#173D2C] text-[9px] font-bold rounded-full flex items-center justify-center shadow-2xs">
+                    {wishlistCount > 9 ? "9+" : wishlistCount}
+                  </span>
+                )}
               </Link>
 
               {/* Shopping Bag Trigger */}
@@ -386,6 +411,21 @@ export function Header() {
                   >
                     <span>📍</span>
                     <span>Boutique Locations</span>
+                  </Link>
+                  <Link
+                    href="/wishlist"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-[#173D2C] rounded-lg hover:bg-white transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Heart className="w-4 h-4 text-[#B89453]" />
+                      <span>Saved Wishlist</span>
+                    </span>
+                    {wishlistCount > 0 && (
+                      <span className="text-[10px] bg-[#B89453] text-[#173D2C] font-bold px-1.5 py-0.5 rounded-full">
+                        {wishlistCount}
+                      </span>
+                    )}
                   </Link>
                   <Link
                     href="/login"
