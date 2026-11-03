@@ -969,6 +969,13 @@ Please do not share this code with anyone.
                 <strong>Estimated Delivery:</strong> Express Pan-India Delivery (3-5 business days)
               </div>
 
+              <!-- View Order Tracking CTA -->
+              <div style="text-align:center; margin: 24px 0 20px 0;">
+                <a href="${appOrigin}/account/orders/${order.id || order.orderNumber}/track" style="background-color:#173D2C; color:#FFFFFF; padding:12px 24px; border-radius:12px; font-size:13px; font-weight:bold; text-decoration:none; display:inline-block; font-family:sans-serif; letter-spacing:0.5px;">
+                  View Order Details &amp; Live Tracking &rarr;
+                </a>
+              </div>
+
               <div style="font-size:11px; line-height:1.6; color:#78716C; font-family:sans-serif; background-color:#FFFFFF; border:1px solid #DCE5D8; border-radius:8px; padding:12px; text-align:center;">
                 <strong>Need Assistance with your order?</strong><br>
                 Fruits &amp; Nuts Concierge Hotline: <strong>+91-8368301495</strong> &bull; Email: <strong>fruitsnutswebsite@gmail.com</strong><br>
