@@ -758,13 +758,19 @@ export class OrderService {
             ? `${user.profile.firstName} ${user.profile.lastName}`
             : targetShippingAddress.recipientName;
 
+        const effectiveCustomerEmail =
+          (typeof targetShippingAddress === "object" && (targetShippingAddress as any).email) ||
+          (validated as any).customerEmail ||
+          user.email ||
+          "";
+
         // 12. Create master Order record
         const order = await tx.order.create({
           data: {
             orderNumber,
             userId,
             customerName,
-            customerEmail: user.email ?? "",
+            customerEmail: effectiveCustomerEmail.trim().toLowerCase(),
             customerPhone: user.phone ?? targetShippingAddress.phone,
             shippingRecipientName: targetShippingAddress.recipientName,
             shippingAddressLine1: targetShippingAddress.addressLine1,
@@ -877,11 +883,28 @@ export class OrderService {
           });
         }
 
+        const hydratedOrder = {
+          ...order,
+          customerEmail: effectiveCustomerEmail.trim().toLowerCase(),
+          items: activeItems.map((item) => ({
+            id: item.variant.id,
+            productId: item.variant.productId,
+            variantId: item.variant.id,
+            productNameSnapshot: item.variant.product.name,
+            skuSnapshot: item.variant.sku,
+            weightGramsSnapshot: item.variant.weightGrams,
+            unitPriceSnapshot: Number(item.variant.sellingPrice),
+            quantity: item.quantity,
+            lineTotalSnapshot: Number(item.variant.sellingPrice) * item.quantity,
+            variant: item.variant,
+          })),
+        };
+
         if (paymentMethod === "COD") {
-          NotificationService.sendOrderConfirmationEmail(order).catch((e) =>
+          NotificationService.sendOrderConfirmationEmail(hydratedOrder).catch((e) =>
             console.warn("[OrderService] Customer COD email skipped/failed:", e.message)
           );
-          NotificationService.sendAdminNewOrderNotification(order).catch((e) =>
+          NotificationService.sendAdminNewOrderNotification(hydratedOrder).catch((e) =>
             console.warn("[OrderService] Admin COD notification skipped/failed:", e.message)
           );
         }
@@ -1602,8 +1625,38 @@ export class OrderService {
       throw AppError.notFound(`Order with ID '${orderId}' not found.`);
     }
 
+    let notifications: any[] = [];
+    try {
+      const dbNotifs = await db.notification.findMany({
+        where: {
+          channel: "EMAIL",
+        },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      });
+      notifications = dbNotifs
+        .filter(
+          (n) =>
+            (n.payloadJson as any)?.orderId === order.id ||
+            (n.payloadJson as any)?.orderNumber === order.orderNumber
+        )
+        .map((n) => ({
+          id: n.id,
+          eventType: n.eventType,
+          channel: n.channel,
+          recipient: n.recipient,
+          status: n.status,
+          failureReason: n.failureReason,
+          sentAt: n.sentAt,
+          createdAt: n.createdAt,
+        }));
+    } catch {
+      notifications = [];
+    }
+
     return {
       ...order,
+      notifications,
       subtotalAmount: Number(order.subtotalAmount),
       discountAmount: Number(order.discountAmount),
       shippingFee: Number(order.shippingFee),

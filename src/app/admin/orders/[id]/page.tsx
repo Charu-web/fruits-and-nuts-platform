@@ -74,6 +74,16 @@ interface OrderDetail {
       roleId: string;
     } | null;
   }>;
+  notifications?: Array<{
+    id: string;
+    eventType: string;
+    channel: string;
+    recipient: string;
+    status: string;
+    failureReason: string | null;
+    sentAt: string | null;
+    createdAt: string;
+  }>;
 }
 
 export default function AdminOrderDetailPage() {
@@ -104,6 +114,35 @@ export default function AdminOrderDetailPage() {
   // Cancellation form state
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, startCancelling] = useTransition();
+
+  // Email resend state
+  const [isResendingEmail, setIsResendingEmail] = useState(false);
+
+  const handleResendEmail = async () => {
+    if (!order) return;
+    setIsResendingEmail(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/admin/orders/${order.id}/resend-email`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error?.message || "Failed to resend confirmation email");
+      }
+      setSuccessMessage(
+        data.data?.sent
+          ? `Order confirmation email sent successfully to ${order.customerEmail || "customer"}!`
+          : `Email skipped/failed: ${data.data?.reason || "Provider unconfigured"}`
+      );
+      fetchOrderDetails();
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err: any) {
+      setError(err.message || "Failed to resend email");
+    } finally {
+      setIsResendingEmail(false);
+    }
+  };
 
   // Fetch authenticated admin
   useEffect(() => {
@@ -753,6 +792,119 @@ export default function AdminOrderDetailPage() {
                   <span className="font-bold">🎁 Gift Wrapped Order:</span>
                   <p className="mt-1 italic">"{order.giftMessage || "Standard Premium Gift Wrapping"}"</p>
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* Email Notifications & Delivery Audit Card */}
+          <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-500">Order Notifications</h3>
+              <span className="text-[11px] font-medium text-neutral-400">Transactional Email</span>
+            </div>
+            <div className="mt-4 space-y-4 text-xs">
+              {/* Customer Confirmation Email */}
+              <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-neutral-800">Customer Confirmation</span>
+                  {(() => {
+                    const custNotif = order.notifications?.find(
+                      (n) => n.eventType === "ORDER_CONFIRMATION" || n.eventType === "COD_ORDER_CONFIRMATION" || n.eventType === "ONLINE_ORDER_CONFIRMATION"
+                    );
+                    if (!custNotif) {
+                      return <span className="rounded bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">PENDING</span>;
+                    }
+                    if (custNotif.status === "SENT") {
+                      return <span className="rounded bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">✓ SENT</span>;
+                    }
+                    return <span className="rounded bg-rose-50 px-2 py-0.5 font-semibold text-rose-700">✕ FAILED</span>;
+                  })()}
+                </div>
+                <div className="mt-1 text-neutral-500">
+                  <span>To: {order.customerEmail || "No customer email"}</span>
+                  {(() => {
+                    const custNotif = order.notifications?.find(
+                      (n) => n.eventType === "ORDER_CONFIRMATION" || n.eventType === "COD_ORDER_CONFIRMATION" || n.eventType === "ONLINE_ORDER_CONFIRMATION"
+                    );
+                    if (custNotif?.sentAt) {
+                      return (
+                        <span className="block text-[11px] text-neutral-400 mt-0.5">
+                          Sent: {new Date(custNotif.sentAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                        </span>
+                      );
+                    }
+                    if (custNotif?.failureReason) {
+                      return (
+                        <span className="block text-[11px] text-rose-600 mt-0.5">
+                          Error: {custNotif.failureReason}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+
+              {/* Admin New-Order Alert */}
+              <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-neutral-800">Admin Order Alert</span>
+                  {(() => {
+                    const adminNotif = order.notifications?.find(
+                      (n) => n.eventType === "ADMIN_ORDER_ALERT" || n.eventType === "ADMIN_COD_ORDER_ALERT" || n.eventType === "ADMIN_ONLINE_ORDER_ALERT"
+                    );
+                    if (!adminNotif) {
+                      return <span className="rounded bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">PENDING</span>;
+                    }
+                    if (adminNotif.status === "SENT") {
+                      return <span className="rounded bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">✓ SENT</span>;
+                    }
+                    return <span className="rounded bg-rose-50 px-2 py-0.5 font-semibold text-rose-700">✕ FAILED</span>;
+                  })()}
+                </div>
+                <div className="mt-1 text-neutral-500">
+                  <span>To: fruitsnutswebsite@gmail.com</span>
+                  {(() => {
+                    const adminNotif = order.notifications?.find(
+                      (n) => n.eventType === "ADMIN_ORDER_ALERT" || n.eventType === "ADMIN_COD_ORDER_ALERT" || n.eventType === "ADMIN_ONLINE_ORDER_ALERT"
+                    );
+                    if (adminNotif?.sentAt) {
+                      return (
+                        <span className="block text-[11px] text-neutral-400 mt-0.5">
+                          Sent: {new Date(adminNotif.sentAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                        </span>
+                      );
+                    }
+                    if (adminNotif?.failureReason) {
+                      return (
+                        <span className="block text-[11px] text-rose-600 mt-0.5">
+                          Error: {adminNotif.failureReason}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+
+              {canMutate && (
+                <button
+                  type="button"
+                  disabled={isResendingEmail}
+                  onClick={handleResendEmail}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 shadow-xs hover:bg-neutral-50 disabled:opacity-50 cursor-pointer"
+                >
+                  {isResendingEmail ? (
+                    <>
+                      <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span>Dispatching Email...</span>
+                    </>
+                  ) : (
+                    <span>Resend Confirmation Email</span>
+                  )}
+                </button>
               )}
             </div>
           </div>

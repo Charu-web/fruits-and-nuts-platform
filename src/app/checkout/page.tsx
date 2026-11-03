@@ -21,6 +21,7 @@ import { Breadcrumbs } from "@/components/ui/breadcrumb";
 interface AddressForm {
   recipientName: string;
   phone: string;
+  email: string;
   addressLine1: string;
   addressLine2: string;
   landmark: string;
@@ -37,6 +38,7 @@ export default function CheckoutPage() {
   const [form, setForm] = useState<AddressForm>({
     recipientName: "",
     phone: "",
+    email: "",
     addressLine1: "",
     addressLine2: "",
     landmark: "",
@@ -74,8 +76,13 @@ export default function CheckoutPage() {
     setErrorMessage(null);
 
     // Form validation
-    if (!form.recipientName || !form.phone || !form.addressLine1 || !form.city || !form.state || !form.postalCode) {
-      setErrorMessage("Please fill in all mandatory shipping address fields.");
+    if (!form.recipientName || !form.phone || !form.email || !form.addressLine1 || !form.city || !form.state || !form.postalCode) {
+      setErrorMessage("Please fill in all mandatory shipping address fields including email.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setErrorMessage("Please enter a valid email address for order confirmation & tracking.");
       return;
     }
 
@@ -102,9 +109,11 @@ export default function CheckoutPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          customerEmail: form.email.trim().toLowerCase(),
           shippingAddress: {
             recipientName: form.recipientName,
             phone: form.phone,
+            email: form.email.trim().toLowerCase(),
             addressLine1: form.addressLine1,
             addressLine2: form.addressLine2 || undefined,
             landmark: form.landmark || undefined,
@@ -261,6 +270,21 @@ export default function CheckoutPage() {
                   className="w-full text-xs px-3.5 py-2.5 bg-[#FAF7F0] border border-[#E5DEC9] rounded-xl focus:outline-none focus:border-[#173D2C] text-[#242824]"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-[#173D2C] block mb-1">
+                Email Address (For Order Confirmation &amp; Tracking) *
+              </label>
+              <input
+                type="email"
+                required
+                name="email"
+                value={form.email}
+                onChange={handleInputChange}
+                placeholder="e.g., rajesh.sharma@example.com"
+                className="w-full text-xs px-3.5 py-2.5 bg-[#FAF7F0] border border-[#E5DEC9] rounded-xl focus:outline-none focus:border-[#173D2C] text-[#242824]"
+              />
             </div>
 
             <div>

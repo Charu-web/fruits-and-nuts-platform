@@ -30,6 +30,12 @@ export const ShippingAddressInputSchema = z.object({
     .string()
     .trim()
     .regex(INDIAN_PHONE_REGEX, "Please provide a valid 10-digit Indian mobile number"),
+  email: z
+    .string()
+    .trim()
+    .email("Please provide a valid email address for order updates")
+    .max(255)
+    .optional(),
   addressLine1: z
     .string()
     .trim()
@@ -65,6 +71,7 @@ export const CreateOrderSchema = z
       .default("COD"),
     giftWrapEnabled: z.boolean().default(false),
     giftMessage: z.string().trim().max(500, "Gift message cannot exceed 500 characters").optional().nullable(),
+    customerEmail: z.string().trim().email("Please provide a valid email address for order confirmation").max(255).optional(),
     idempotencyKey: z.string().max(64).optional(),
     items: z.array(OrderItemInputSchema).optional(),
   })

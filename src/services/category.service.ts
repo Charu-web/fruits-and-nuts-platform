@@ -11,75 +11,156 @@ import {
 const FALLBACK_CATEGORIES = [
   {
     id: 1,
-    name: "Dry Fruits & Nuts",
-    slug: "dry-fruits-nuts",
-    description: "Premium single-origin Kashmiri almonds, jumbo Afghan cashews, and rich walnuts.",
+    name: "Fruits & Nuts",
+    slug: "fruits-and-nuts",
+    description: "Whole, sliced, roasted, and flavored specialty nuts.",
     imageUrl: "/images/categories/dry-fruits.jpg",
     displayOrder: 1,
     isActive: true,
-    metaTitle: "Buy Premium Dry Fruits & Nuts Online | M/S Fruits & Nuts",
-    metaDescription: "Handpicked Mamra almonds, king cashews, and pistachio kernels sourced directly from origin orchards.",
-    createdAt: new Date("2026-08-01"),
-    updatedAt: new Date("2026-10-14"),
     subcategories: [
-      { id: 101, categoryId: 1, name: "Almonds & Kernels", slug: "almonds-kernels", description: "Grade-A Kashmiri Mamra, Sanora, and California almonds", displayOrder: 1, isActive: true },
-      { id: 102, categoryId: 1, name: "Cashews & Pistachios", slug: "cashews-pistachios", description: "Jumbo W180 cashews and roasted salted pistachios", displayOrder: 2, isActive: true },
-      { id: 103, categoryId: 1, name: "Walnuts & Pecans", slug: "walnuts-pecans", description: "Paper-shell Kashmiri walnuts and golden light halves", displayOrder: 3, isActive: true },
+      { id: 1, categoryId: 1, name: "Raw / Natural Nuts", slug: "raw-natural-nuts", displayOrder: 1, isActive: true },
+      { id: 2, categoryId: 1, name: "Roasted & Salted Nuts", slug: "roasted-salted-nuts", displayOrder: 2, isActive: true },
+      { id: 3, categoryId: 1, name: "Flavored Gourmet Nuts", slug: "flavored-gourmet-nuts", displayOrder: 3, isActive: true },
     ],
     _count: { products: 12 },
   },
   {
     id: 2,
-    name: "Kashmiri Specialties",
-    slug: "kashmiri-specialties",
-    description: "GI-tagged Pampore Mongra Saffron, dried wild morels (Gucchi), and Sulai honey.",
-    imageUrl: "/images/categories/kashmir-specials.jpg",
+    name: "Dry Fruits",
+    slug: "dry-fruits",
+    description: "Premium almonds, cashews, walnuts, pistachios, and figs.",
+    imageUrl: "/images/categories/dry-fruits.jpg",
     displayOrder: 2,
     isActive: true,
-    metaTitle: "Pure Kashmiri Saffron & Gourmet Specialties | M/S Fruits & Nuts",
-    metaDescription: "Certified Grade-A Pampore saffron threads, Himalayan morels, and pure acacia flower nectar.",
-    createdAt: new Date("2026-08-01"),
-    updatedAt: new Date("2026-10-14"),
     subcategories: [
-      { id: 201, categoryId: 2, name: "GI Saffron & Kehwa", slug: "gi-saffron-kehwa", description: "ISO 3632 Grade-1 tested saffron threads and spice blends", displayOrder: 1, isActive: true },
-      { id: 202, categoryId: 2, name: "Wild Morel Mushrooms (Gucchi)", slug: "wild-morel-mushrooms", description: "Foraged Himalayan Morchella conica wild mushrooms", displayOrder: 2, isActive: true },
+      { id: 4, categoryId: 2, name: "Almonds / Badam", slug: "almonds-badam", displayOrder: 1, isActive: true },
+      { id: 5, categoryId: 2, name: "Cashews / Kaju", slug: "cashews-kaju", displayOrder: 2, isActive: true },
+      { id: 6, categoryId: 2, name: "Walnuts / Akhrot", slug: "walnuts-akhrot", displayOrder: 3, isActive: true },
+      { id: 7, categoryId: 2, name: "Pistachios / Pista", slug: "pistachios-pista", displayOrder: 4, isActive: true },
+      { id: 8, categoryId: 2, name: "Raisins / Kishmish", slug: "raisins-kishmish", displayOrder: 5, isActive: true },
+      { id: 9, categoryId: 2, name: "Figs / Anjeer", slug: "figs-anjeer", displayOrder: 6, isActive: true },
+      { id: 10, categoryId: 2, name: "Berries & Prunes", slug: "berries-prunes", displayOrder: 7, isActive: true },
+    ],
+    _count: { products: 15 },
+  },
+  {
+    id: 3,
+    name: "Dates / Khajoor",
+    slug: "dates-khajoor",
+    description: "Artisanal Medjool, Ajwa, Mabroom, and stuffed dates.",
+    imageUrl: "/images/categories/berries-dates.jpg",
+    displayOrder: 3,
+    isActive: true,
+    subcategories: [
+      { id: 11, categoryId: 3, name: "Premium Cultivars", slug: "premium-cultivars", displayOrder: 1, isActive: true },
+      { id: 12, categoryId: 3, name: "Stuffed Gourmet Dates", slug: "stuffed-gourmet-dates", displayOrder: 2, isActive: true },
+      { id: 13, categoryId: 3, name: "Chocolate Dipped Dates", slug: "chocolate-dipped-dates", displayOrder: 3, isActive: true },
     ],
     _count: { products: 6 },
   },
   {
-    id: 3,
-    name: "Berries, Figs & Dates",
-    slug: "berries-figs-dates",
-    description: "Sun-dried Kandahar Anjeer, Medjool Royal Dates, and mountain blueberries.",
-    imageUrl: "/images/categories/berries-dates.jpg",
-    displayOrder: 3,
-    isActive: true,
-    metaTitle: "Gourmet Dried Berries, Afghan Figs & Royal Dates",
-    metaDescription: "Naturally sun-cured Afghan garland figs, Saudi Medjool dates, and antioxidant berries.",
-    createdAt: new Date("2026-08-01"),
-    updatedAt: new Date("2026-10-14"),
-    subcategories: [
-      { id: 301, categoryId: 3, name: "Afghan Garland Figs (Anjeer)", slug: "afghan-garland-figs", description: "Sun-dried natural garland figs from Kandahar", displayOrder: 1, isActive: true },
-      { id: 302, categoryId: 3, name: "Royal Medjool Dates", slug: "royal-medjool-dates", description: "Jumbo soft Medjool and Ajwa dates", displayOrder: 2, isActive: true },
-      { id: 303, categoryId: 3, name: "Superfood Berries & Seeds", slug: "superfood-berries-seeds", description: "Dried wild cranberries, blueberries, and organic chia seeds", displayOrder: 3, isActive: true },
-    ],
-    _count: { products: 8 },
-  },
-  {
     id: 4,
-    name: "Festive & Luxury Gifting",
-    slug: "festive-luxury-gifting",
-    description: "Handcrafted pine wood chests, bespoke velvet sleeve boxes, and royal corporate hampers.",
-    imageUrl: "/images/categories/gifting-hampers.jpg",
+    name: "Super Seeds",
+    slug: "seeds",
+    description: "Raw and slow-roasted chia, flax, pumpkin, and sunflower seeds.",
+    imageUrl: "/images/categories/dry-fruits.jpg",
     displayOrder: 4,
     isActive: true,
-    metaTitle: "Luxury Dried Fruit Hampers & Corporate Gift Boxes",
-    metaDescription: "Artisanal handcrafted gift hampers with custom wax-sealed calligraphy greeting cards.",
-    createdAt: new Date("2026-08-01"),
-    updatedAt: new Date("2026-10-14"),
     subcategories: [
-      { id: 401, categoryId: 4, name: "Imperial Wooden Trunks", slug: "imperial-wooden-trunks", description: "Solid pinewood brass-clamped royal keepsake trunks", displayOrder: 1, isActive: true },
-      { id: 402, categoryId: 4, name: "Festive Occasion Boxes", slug: "festive-occasion-boxes", description: "Diwali, wedding, and corporate prestige gift boxes", displayOrder: 2, isActive: true },
+      { id: 14, categoryId: 4, name: "Raw Single Varietals", slug: "raw-single-varietals", displayOrder: 1, isActive: true },
+      { id: 15, categoryId: 4, name: "Roasted Superfood Mixes", slug: "roasted-superfood-mixes", displayOrder: 2, isActive: true },
+    ],
+    _count: { products: 5 },
+  },
+  {
+    id: 5,
+    name: "Artisan Tea",
+    slug: "tea",
+    description: "Specialty whole leaf orthodox, CTC, green, and floral herbal infusions.",
+    imageUrl: "/images/categories/dry-fruits.jpg",
+    displayOrder: 5,
+    isActive: true,
+    subcategories: [
+      { id: 16, categoryId: 5, name: "Orthodox Whole Leaf", slug: "orthodox-whole-leaf", displayOrder: 1, isActive: true },
+      { id: 17, categoryId: 5, name: "CTC Black Teas", slug: "ctc-black-teas", displayOrder: 2, isActive: true },
+      { id: 18, categoryId: 5, name: "Green Teas", slug: "green-teas", displayOrder: 3, isActive: true },
+      { id: 19, categoryId: 5, name: "Herbal & Wellness Infusions", slug: "herbal-wellness-infusions", displayOrder: 4, isActive: true },
+      { id: 20, categoryId: 5, name: "Kashmiri Kahwa & Spiced", slug: "kahwa-spiced", displayOrder: 5, isActive: true },
+    ],
+    _count: { products: 5 },
+  },
+  {
+    id: 6,
+    name: "Gourmet Chocolates",
+    slug: "chocolates",
+    description: "Handcrafted dark chocolates, nut clusters, and dragées.",
+    imageUrl: "/images/categories/dry-fruits.jpg",
+    displayOrder: 6,
+    isActive: true,
+    subcategories: [
+      { id: 21, categoryId: 6, name: "Artisan Dark Chocolate Bars", slug: "artisan-dark-bars", displayOrder: 1, isActive: true },
+      { id: 22, categoryId: 6, name: "Nut Clusters & Dragées", slug: "nut-clusters-dragees", displayOrder: 2, isActive: true },
+      { id: 23, categoryId: 6, name: "Chocolate Dipped Dry Fruits", slug: "chocolate-dipped-dry-fruits", displayOrder: 3, isActive: true },
+    ],
+    _count: { products: 4 },
+  },
+  {
+    id: 7,
+    name: "Royal Mouth Fresheners",
+    slug: "mouth-fresheners",
+    description: "Heritage paan blends, silver-coated cardamom, and digestive mukhwas (100% Tobacco-free).",
+    imageUrl: "/images/categories/dry-fruits.jpg",
+    displayOrder: 7,
+    isActive: true,
+    subcategories: [
+      { id: 24, categoryId: 7, name: "Heritage Paan Confections", slug: "heritage-paan-confections", displayOrder: 1, isActive: true },
+      { id: 25, categoryId: 7, name: "Roasted Digestive Seeds", slug: "roasted-digestive-seeds", displayOrder: 2, isActive: true },
+      { id: 26, categoryId: 7, name: "Amla & Fruit Digestives", slug: "amla-fruit-digestives", displayOrder: 3, isActive: true },
+    ],
+    _count: { products: 4 },
+  },
+  {
+    id: 8,
+    name: "Value Combos",
+    slug: "combos",
+    description: "Curated daily nutrition bundles and family packs.",
+    imageUrl: "/images/categories/dry-fruits.jpg",
+    displayOrder: 8,
+    isActive: true,
+    subcategories: [
+      { id: 27, categoryId: 8, name: "Daily Health Packs", slug: "daily-health-packs", displayOrder: 1, isActive: true },
+      { id: 28, categoryId: 8, name: "Multi-Pack Bundles", slug: "multi-pack-bundles", displayOrder: 2, isActive: true },
+    ],
+    _count: { products: 4 },
+  },
+  {
+    id: 9,
+    name: "Luxury Gifting",
+    slug: "gifting",
+    description: "Bespoke wooden caskets, velvet trays, and festive gift boxes.",
+    imageUrl: "/images/categories/gifting-hampers.jpg",
+    displayOrder: 9,
+    isActive: true,
+    subcategories: [
+      { id: 29, categoryId: 9, name: "Classic Wooden Keepsake Boxes", slug: "wooden-keepsake-boxes", displayOrder: 1, isActive: true },
+      { id: 30, categoryId: 9, name: "Royal Velvet Presentation Trays", slug: "royal-velvet-trays", displayOrder: 2, isActive: true },
+      { id: 31, categoryId: 9, name: "Heritage Metal Tin Hampers", slug: "heritage-tin-hampers", displayOrder: 3, isActive: true },
+      { id: 32, categoryId: 9, name: "Build Your Own Box (BYOB)", slug: "byob-gift-boxes", displayOrder: 4, isActive: true },
+    ],
+    _count: { products: 6 },
+  },
+  {
+    id: 10,
+    name: "Specialty Products",
+    slug: "specialty",
+    description: "Kashmiri Grade-A saffron, organic honey, and cold-pressed nut oils.",
+    imageUrl: "/images/categories/kashmir-specials.jpg",
+    displayOrder: 10,
+    isActive: true,
+    subcategories: [
+      { id: 33, categoryId: 10, name: "Kashmiri Saffron", slug: "kashmiri-saffron", displayOrder: 1, isActive: true },
+      { id: 34, categoryId: 10, name: "Organic Honey & Spreads", slug: "organic-honey-spreads", displayOrder: 2, isActive: true },
+      { id: 35, categoryId: 10, name: "Cold-Pressed Nut Oils", slug: "cold-pressed-nut-oils", displayOrder: 3, isActive: true },
     ],
     _count: { products: 5 },
   },
@@ -91,7 +172,12 @@ export class CategoryService {
    */
   static async getAllCategories(includeInactive = false) {
     try {
-      const categories = await db.category.findMany({
+      // Query with a 4000ms timeout race to prevent indefinite request stalls on cold/slow database
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Database category query timeout (4000ms)")), 4000)
+      );
+
+      const dbQueryPromise = db.category.findMany({
         where: includeInactive ? {} : { isActive: true },
         orderBy: { displayOrder: "asc" },
         include: {
@@ -107,7 +193,9 @@ export class CategoryService {
         },
       });
 
-      if (categories.length === 0) {
+      const categories = await Promise.race([dbQueryPromise, timeoutPromise]);
+
+      if (!categories || categories.length === 0) {
         return FALLBACK_CATEGORIES as any;
       }
       return categories;

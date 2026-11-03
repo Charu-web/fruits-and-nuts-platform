@@ -1,6 +1,16 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import dotenv from "dotenv";
+
+if (fs.existsSync(".env.local")) {
+  dotenv.config({ path: ".env.local" });
+}
+if (fs.existsSync("prisma_deploy.env")) {
+  const deployEnv = dotenv.parse(fs.readFileSync("prisma_deploy.env"));
+  process.env.DATABASE_URL = deployEnv.DATABASE_URL;
+  process.env.DIRECT_URL = deployEnv.DIRECT_URL;
+}
 
 const testDir = path.join(process.cwd(), "src", "test");
 const testFiles = fs.readdirSync(testDir).filter((f) => f.endsWith(".test.ts"));

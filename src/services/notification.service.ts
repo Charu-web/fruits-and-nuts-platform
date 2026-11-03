@@ -13,6 +13,8 @@
 
 import * as net from "node:net";
 import * as tls from "node:tls";
+import { db } from "@/lib/db";
+import { getProductImageUrl } from "@/lib/catalog/product-asset-registry";
 
 export interface NotificationStatus {
   emailConfigured: boolean;
@@ -67,7 +69,7 @@ export class NotificationService {
   static isSmtpConfigured(): boolean {
     const host = process.env.SMTP_HOST?.trim();
     const user = process.env.SMTP_USER?.trim();
-    const pass = process.env.SMTP_PASS?.trim();
+    const pass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD)?.trim();
 
     if (!host || host === "" || host.startsWith("placeholder_")) return false;
     if (!user || user === "" || user.startsWith("placeholder_")) return false;
@@ -225,7 +227,7 @@ export class NotificationService {
         const port = parseInt(process.env.SMTP_PORT || "587", 10);
         const secure = process.env.SMTP_SECURE === "true" || port === 465;
         const user = process.env.SMTP_USER?.trim().replace(/^["']|["']$/g, "");
-        const rawPass = process.env.SMTP_PASS?.trim().replace(/^["']|["']$/g, "");
+        const rawPass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD)?.trim().replace(/^["']|["']$/g, "");
         const pass = host.includes("gmail.com") ? rawPass?.replace(/\s+/g, "") : rawPass;
 
         let smtpResponse = "250 OK";
@@ -706,10 +708,45 @@ Please do not share this code with anyone.
   }
 
   /**
-   * Dispatches branded Cash on Delivery order confirmation email to customer.
+   * Persists an audit record to the notifications table safely without throwing.
+   */
+  private static async recordNotificationAudit(data: {
+    userId?: string | null;
+    eventType: string;
+    channel: string;
+    recipient: string;
+    payloadJson: any;
+    status: "SENT" | "FAILED" | "QUEUED";
+    failureReason?: string | null;
+  }) {
+    try {
+      const validUserId =
+        data.userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.userId)
+          ? data.userId
+          : null;
+      await db.notification.create({
+        data: {
+          userId: validUserId,
+          eventType: data.eventType,
+          channel: data.channel,
+          recipient: data.recipient,
+          payloadJson: data.payloadJson,
+          status: data.status,
+          failureReason: data.failureReason || null,
+          sentAt: data.status === "SENT" ? new Date() : null,
+        },
+      });
+    } catch (e: any) {
+      console.warn("[NotificationService] Notification record skipped:", e?.message);
+    }
+  }
+
+  /**
+   * Dispatches branded order confirmation email to customer with idempotency & delivery tracking.
    */
   static async sendOrderConfirmationEmail(
-    order: any
+    order: any,
+    options?: { forceRetry?: boolean }
   ): Promise<{ sent: boolean; provider: string; reason?: string }> {
     const customerEmail =
       order.customerEmail ||
@@ -717,31 +754,104 @@ Please do not share this code with anyone.
       order.shippingRecipientEmail ||
       order.shippingEmail;
 
-    if (!customerEmail || !customerEmail.includes("@")) {
-      return { sent: false, provider: "NO_EMAIL", reason: "Customer email not provided or invalid" };
-    }
-
+    const orderId = order.id || order.orderNumber;
     const isCod = order.paymentMethod === "COD";
     const paymentLabel = isCod ? "Cash on Delivery" : "Online Payment (Prepaid)";
+    const paymentStatusDisplay = isCod ? "Pending Collection" : (order.paymentStatus === "PAID" ? "Paid" : "Authorized");
+    const orderStatusDisplay = isCod ? "Confirmed" : (order.orderStatus || "Confirmed");
     const paymentInstruction = isCod
-      ? "&bull; Please keep exact cash or UPI QR scanner ready for our logistics delivery partner."
+      ? "&bull; Please keep exact cash or UPI QR scanner ready for our logistics delivery partner upon delivery."
       : "&bull; Payment successfully received via online payment gateway. No amount due at delivery.";
     const totalHeaderLabel = isCod ? "Total Payable on Delivery (COD)" : "Total Amount Paid";
     const statusBadge = isCod ? "Cash on Delivery Order Confirmed" : "Order & Payment Confirmed";
 
+    if (!customerEmail || !customerEmail.includes("@")) {
+      const reason = "Customer email not provided or invalid";
+      await this.recordNotificationAudit({
+        userId: order.userId,
+        eventType: "ORDER_CONFIRMATION",
+        channel: "EMAIL",
+        recipient: customerEmail || "UNKNOWN",
+        payloadJson: { orderId, orderNumber: order.orderNumber, paymentMethod: paymentLabel },
+        status: "FAILED",
+        failureReason: reason,
+      });
+      return { sent: false, provider: "NO_EMAIL", reason };
+    }
+
+    // Idempotency Gate: prevent duplicate customer emails unless forceRetry is specified
+    if (!options?.forceRetry) {
+      try {
+        const existingRecords = await db.notification.findMany({
+          where: {
+            eventType: "ORDER_CONFIRMATION",
+            channel: "EMAIL",
+            recipient: customerEmail,
+            status: "SENT",
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        });
+        const alreadySent = existingRecords.some(
+          (r) => (r.payloadJson as any)?.orderId === order.id || (r.payloadJson as any)?.orderNumber === order.orderNumber
+        );
+        if (alreadySent) {
+          console.log(`[NotificationService] Duplicate order confirmation email prevented for order #${order.orderNumber}`);
+          return { sent: true, provider: "IDEMPOTENT_SKIPPED", reason: "Already sent" };
+        }
+      } catch (err: any) {
+        console.warn("[NotificationService] Idempotency check warning:", err?.message);
+      }
+    }
+
+    const appOrigin =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "https://fruits-and-nuts-platform.vercel.app");
+
+    const orderDateFormatted = new Date(order.createdAt || Date.now()).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+    });
+
     const itemsListHtml = (order.items || [])
-      .map(
-        (item: any) =>
-          `<tr>
-            <td style="padding:10px 0; border-bottom:1px solid #E5DEC9; font-size:13px; color:#173D2C;">
-              <strong>${item.productNameSnapshot || item.variant?.product?.name || "Harvest Item"}</strong>
-              <div style="font-size:11px; color:#78716C;">Qty: ${item.quantity} &bull; ${item.weightGramsSnapshot || 500}g</div>
-            </td>
-            <td align="right" style="padding:10px 0; border-bottom:1px solid #E5DEC9; font-size:13px; font-weight:bold; color:#173D2C;">
-              ₹${Number(item.lineTotalSnapshot || item.totalPrice || 0).toLocaleString("en-IN")}
-            </td>
-          </tr>`
-      )
+      .map((item: any) => {
+        const itemName = item.productNameSnapshot || item.variant?.product?.name || "Gourmet Harvest";
+        const unitPrice = Number(item.unitPriceSnapshot || item.variant?.sellingPrice || 0);
+        const lineTotal = Number(item.lineTotalSnapshot || item.totalPrice || unitPrice * item.quantity);
+        const weight = item.weightGramsSnapshot || item.variant?.weightGrams || 500;
+        const slug = item.variant?.product?.slug || item.productSlug || "";
+        const rawImg = item.imageUrl || item.variant?.product?.images?.[0]?.imageUrl || (slug ? getProductImageUrl(slug) : null);
+        const itemImgUrl = rawImg ? (rawImg.startsWith("http") ? rawImg : `${appOrigin}${rawImg}`) : null;
+
+        return `<tr>
+          <td style="padding:12px 0; border-bottom:1px solid #E5DEC9; font-size:13px; color:#173D2C;">
+            <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+              <tr>
+                ${itemImgUrl ? `<td style="padding-right:12px; vertical-align:middle;">
+                  <img src="${itemImgUrl}" alt="${itemName}" width="48" height="48" style="width:48px; height:48px; object-fit:cover; border-radius:8px; border:1px solid #E5DEC9; display:block;" />
+                </td>` : ""}
+                <td style="vertical-align:middle;">
+                  <strong style="color:#173D2C;">${itemName}</strong>
+                  <div style="font-size:11px; color:#78716C; margin-top:2px;">
+                    Qty: ${item.quantity} &bull; ${weight}g &bull; ₹${unitPrice.toLocaleString("en-IN")}/unit
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td align="right" style="padding:12px 0; border-bottom:1px solid #E5DEC9; font-size:13px; font-weight:bold; color:#173D2C; vertical-align:middle;">
+            ₹${lineTotal.toLocaleString("en-IN")}
+          </td>
+        </tr>`;
+      })
       .join("");
 
     const shippingAddressFormatted = [
@@ -754,13 +864,18 @@ Please do not share this code with anyone.
       .filter(Boolean)
       .join("<br>");
 
+    const subtotal = Number(order.subtotalAmount || 0);
+    const discount = Number(order.discountAmount || 0);
+    const shipping = Number(order.shippingFee || 0);
+    const giftWrap = Number(order.giftWrapFee || 0);
+
     const htmlBody = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Order Confirmed — Fruits &amp; Nuts</title>
+  <title>Your Fruits &amp; Nuts Order Has Been Confirmed — Order #${order.orderNumber}</title>
 </head>
 <body style="margin:0; padding:0; background-color:#FAF7F0; font-family:'Georgia', serif; color:#1C1917;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#FAF7F0; padding:40px 16px;">
@@ -781,30 +896,71 @@ Please do not share this code with anyone.
                 Thank You For Your Order!
               </h1>
               <p style="font-size:13px; line-height:1.6; color:#57534E; font-family:sans-serif;">
-                Your order <strong>#${order.orderNumber}</strong> (${paymentLabel}) has been confirmed. Our team is vacuum-packing your fresh harvest for express dispatch.
+                Dear <strong>${order.customerName || order.shippingRecipientName || "Valued Customer"}</strong>, your order <strong>#${order.orderNumber}</strong> has been confirmed on <strong>${orderDateFormatted}</strong>. Our team is carefully preparing your fresh harvest for express delivery.
               </p>
               
               <div style="background-color:#FAF7F0; border:1px solid #E5DEC9; border-radius:12px; padding:16px; margin:20px 0; font-family:sans-serif;">
                 <div style="font-size:12px; color:#78716C; text-transform:uppercase; letter-spacing:1px; font-weight:bold;">${totalHeaderLabel}</div>
                 <div style="font-size:26px; font-weight:bold; color:#173D2C; margin-top:4px;">₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}</div>
                 <div style="font-size:11px; color:#8C733E; margin-top:4px;">${paymentInstruction}</div>
+                <div style="margin-top:12px; padding-top:8px; border-top:1px dashed #E5DEC9; font-size:12px; color:#57534E; line-height:1.6;">
+                  <strong>Order ID:</strong> #${order.orderNumber}<br>
+                  <strong>Order Date:</strong> ${orderDateFormatted}<br>
+                  <strong>Payment Method:</strong> ${paymentLabel}<br>
+                  <strong>Payment Status:</strong> ${paymentStatusDisplay}<br>
+                  <strong>Order Status:</strong> ${orderStatusDisplay}
+                </div>
               </div>
 
               <h3 style="font-size:14px; font-weight:bold; color:#173D2C; margin:20px 0 10px 0; font-family:sans-serif; text-transform:uppercase; letter-spacing:1px;">
                 Ordered Harvests
               </h3>
-              <table width="100%" cellspacing="0" cellpadding="0" style="font-family:sans-serif; margin-bottom:20px;">
-                ${itemsListHtml}
+              <table width="100%" cellspacing="0" cellpadding="0" style="font-family:sans-serif; margin-bottom:20px; border-collapse:collapse;">
+                ${itemsListHtml || '<tr><td style="padding:10px 0; color:#78716C; font-size:12px;">Items included in order</td></tr>'}
               </table>
 
-              <div style="font-size:12px; line-height:1.6; color:#57534E; font-family:sans-serif; background-color:#FAF7F0; padding:14px; border-radius:12px; border:1px solid #E5DEC9;">
+              <!-- Financial Breakdown -->
+              <div style="background-color:#FAF7F0; border:1px solid #E5DEC9; border-radius:12px; padding:16px; margin-bottom:20px; font-family:sans-serif; font-size:12px; line-height:1.8; color:#57534E;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                  <span>Subtotal:</span>
+                  <span style="font-weight:bold; color:#173D2C;">₹${subtotal.toLocaleString("en-IN")}</span>
+                </div>
+                ${discount > 0 ? `
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px; color:#166534;">
+                  <span>Coupon Savings:</span>
+                  <span style="font-weight:bold;">-₹${discount.toLocaleString("en-IN")}</span>
+                </div>` : ""}
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                  <span>Express Delivery:</span>
+                  <span style="font-weight:bold; color:#173D2C;">${shipping === 0 ? "FREE" : `₹${shipping.toLocaleString("en-IN")}`}</span>
+                </div>
+                ${giftWrap > 0 ? `
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                  <span>Gift Packaging:</span>
+                  <span style="font-weight:bold; color:#173D2C;">₹${giftWrap.toLocaleString("en-IN")}</span>
+                </div>` : ""}
+                <div style="border-top:1px solid #E5DEC9; margin-top:8px; padding-top:8px; font-size:14px; font-weight:bold; color:#173D2C;">
+                  <span>Final Payable:</span>
+                  <span style="float:right;">₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}</span>
+                </div>
+              </div>
+
+              <div style="font-size:12px; line-height:1.6; color:#57534E; font-family:sans-serif; background-color:#FAF7F0; padding:14px; border-radius:12px; border:1px solid #E5DEC9; margin-bottom:20px;">
                 <strong>Shipping Destination:</strong><br>
                 ${shippingAddressFormatted}<br>
-                Contact: ${order.shippingPhone || order.customerPhone || "N/A"}
+                Contact: ${order.shippingPhone || order.customerPhone || "N/A"}<br>
+                <strong>Estimated Delivery:</strong> Express Pan-India Delivery (3-5 business days)
+              </div>
+
+              <div style="font-size:11px; line-height:1.6; color:#78716C; font-family:sans-serif; background-color:#FFFFFF; border:1px solid #DCE5D8; border-radius:8px; padding:12px; text-align:center;">
+                <strong>Need Assistance with your order?</strong><br>
+                Fruits &amp; Nuts Concierge Hotline: <strong>+91-8368301495</strong> &bull; Email: <strong>fruitsnutswebsite@gmail.com</strong><br>
+                Support Hours: Monday to Saturday, 10:00 AM – 7:00 PM IST
               </div>
 
               <p style="font-size:11px; color:#A8A29E; margin:24px 0 0 0; font-family:sans-serif; text-align:center; border-top:1px solid #DCE5D8; padding-top:16px;">
-                M/S Fruits &amp; Nuts Platform &bull; Concierge: +91-8368301495 &bull; fruitsnutswebsite@gmail.com
+                M/S Fruits &amp; Nuts Platform &bull; Premium Gourmet Dry Fruits &amp; Artisan Delicacies<br>
+                <a href="${appOrigin}" style="color:#B89453; text-decoration:none;">fruitsandnuts.co.in</a>
               </p>
             </td>
           </tr>
@@ -825,43 +981,81 @@ Please do not share this code with anyone.
 
     const textBody = `
 FRUITS & NUTS — ORDER CONFIRMATION
-Order #${order.orderNumber} (${paymentLabel})
+Order #${order.orderNumber}
+Date: ${orderDateFormatted}
 
+Dear ${order.customerName || order.shippingRecipientName || "Valued Customer"},
 Thank you for your order!
-${totalHeaderLabel}: ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}
+
+Order Summary:
+- Subtotal: ₹${subtotal.toLocaleString("en-IN")}
+${discount > 0 ? `- Discount: -₹${discount.toLocaleString("en-IN")}\n` : ""}- Shipping: ${shipping === 0 ? "FREE" : `₹${shipping.toLocaleString("en-IN")}`}
+${giftWrap > 0 ? `- Gift Wrap: ₹${giftWrap.toLocaleString("en-IN")}\n` : ""}- ${totalHeaderLabel}: ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}
+
+Payment Method: ${paymentLabel}
+Payment Status: ${paymentStatusDisplay}
+Order Status: ${orderStatusDisplay}
+
+Delivery Details:
 Recipient: ${order.shippingRecipientName || order.customerName}
 Delivery Address: ${order.shippingAddressLine1 || ""}, ${order.shippingCity || ""} - ${order.shippingPostalCode || ""}
+Contact: ${order.shippingPhone || order.customerPhone || "N/A"}
+Estimated Delivery: Express Pan-India Delivery (3-5 business days)
 
 Ordered Items:
-${textItems}
+${textItems || "- Order items listed in invoice"}
 
-Our team is vacuum-packing your fresh harvest for express dispatch.
-Concierge: +91-8368301495 | fruitsnutswebsite@gmail.com
+Concierge Support:
+Phone / WhatsApp: +91-8368301495 | Email: fruitsnutswebsite@gmail.com
+Store: https://fruitsandnuts.co.in
     `.trim();
 
-    return this.dispatchEmail({
+    const dispatchResult = await this.dispatchEmail({
       to: customerEmail,
-      subject: `Order Confirmed: #${order.orderNumber} (${isCod ? "Cash on Delivery" : "Payment Received"})`,
+      subject: `Your Fruits & Nuts Order Has Been Confirmed — Order #${order.orderNumber}`,
       html: htmlBody,
       text: textBody,
       emailType: isCod ? "COD_ORDER_CONFIRMATION" : "ONLINE_ORDER_CONFIRMATION",
     });
+
+    await this.recordNotificationAudit({
+      userId: order.userId,
+      eventType: "ORDER_CONFIRMATION",
+      channel: "EMAIL",
+      recipient: customerEmail,
+      payloadJson: {
+        orderId,
+        orderNumber: order.orderNumber,
+        paymentMethod: paymentLabel,
+        paymentStatus: paymentStatusDisplay,
+        orderStatus: orderStatusDisplay,
+        amount: Number(order.finalPayableAmount),
+        provider: dispatchResult.provider,
+        reason: dispatchResult.reason || null,
+      },
+      status: dispatchResult.sent ? "SENT" : "FAILED",
+      failureReason: dispatchResult.sent ? null : dispatchResult.reason || "Dispatch failed",
+    });
+
+    return dispatchResult;
   }
 
   /**
    * Backwards-compatible wrapper for Cash on Delivery confirmation.
    */
   static async sendCodOrderConfirmationEmail(
-    order: any
+    order: any,
+    options?: { forceRetry?: boolean }
   ): Promise<{ sent: boolean; provider: string; reason?: string }> {
-    return this.sendOrderConfirmationEmail(order);
+    return this.sendOrderConfirmationEmail(order, options);
   }
 
   /**
-   * Dispatches executive new order notification to administrator.
+   * Dispatches executive new order notification to administrator with idempotency & delivery tracking.
    */
   static async sendAdminNewOrderNotification(
-    order: any
+    order: any,
+    options?: { forceRetry?: boolean }
   ): Promise<{ sent: boolean; provider: string; reason?: string }> {
     const adminEmail = process.env.ADMIN_EMAIL?.trim() || "fruitsnutswebsite@gmail.com";
     const appOrigin =
@@ -872,9 +1066,64 @@ Concierge: +91-8368301495 | fruitsnutswebsite@gmail.com
         ? `https://${process.env.VERCEL_URL}`
         : "https://fruits-and-nuts-platform.vercel.app");
 
+    const orderId = order.id || order.orderNumber;
     const isCod = order.paymentMethod === "COD";
-    const paymentLabel = isCod ? "Cash on Delivery (COD)" : "Online Payment (Prepaid)";
+    const paymentLabel = isCod ? "Cash on Delivery" : "Online Payment (Prepaid)";
+    const paymentStatusDisplay = isCod ? "Pending Collection" : (order.paymentStatus === "PAID" ? "Paid" : "Authorized");
+    const orderStatusDisplay = isCod ? "Confirmed" : (order.orderStatus || "Confirmed");
     const subjectPrefix = isCod ? "New COD Order" : "New Paid Online Order";
+
+    // Idempotency Gate: prevent duplicate admin alert emails unless forceRetry is specified
+    if (!options?.forceRetry) {
+      try {
+        const existingRecords = await db.notification.findMany({
+          where: {
+            eventType: "ADMIN_ORDER_ALERT",
+            channel: "EMAIL",
+            recipient: adminEmail,
+            status: "SENT",
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        });
+        const alreadySent = existingRecords.some(
+          (r) => (r.payloadJson as any)?.orderId === order.id || (r.payloadJson as any)?.orderNumber === order.orderNumber
+        );
+        if (alreadySent) {
+          console.log(`[NotificationService] Duplicate admin order alert prevented for order #${order.orderNumber}`);
+          return { sent: true, provider: "IDEMPOTENT_SKIPPED", reason: "Already sent" };
+        }
+      } catch (err: any) {
+        console.warn("[NotificationService] Idempotency check warning:", err?.message);
+      }
+    }
+
+    const creationTime = new Date(order.createdAt || Date.now()).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+    });
+
+    const adminItemsHtml = (order.items || [])
+      .map((item: any) => {
+        const name = item.productNameSnapshot || item.variant?.product?.name || "Harvest Item";
+        const qty = item.quantity;
+        const total = Number(item.lineTotalSnapshot || item.totalPrice || 0);
+        return `<li style="margin-bottom:4px;"><strong>${name}</strong> x ${qty} &bull; ₹${total.toLocaleString("en-IN")}</li>`;
+      })
+      .join("");
+
+    const adminItemsText = (order.items || [])
+      .map((item: any) => {
+        const name = item.productNameSnapshot || item.variant?.product?.name || "Harvest Item";
+        const qty = item.quantity;
+        const total = Number(item.lineTotalSnapshot || item.totalPrice || 0);
+        return `- ${name} x ${qty} (₹${total.toLocaleString("en-IN")})`;
+      })
+      .join("\n");
 
     const htmlBody = `
 <!DOCTYPE html>
@@ -882,26 +1131,36 @@ Concierge: +91-8368301495 | fruitsnutswebsite@gmail.com
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Order Alert — Fruits &amp; Nuts</title>
+  <title>New Order Received — #${order.orderNumber}</title>
 </head>
 <body style="margin:0; padding:0; background-color:#FAF7F0; font-family:'Georgia', serif; color:#1C1917;">
   <div style="padding:30px 16px;">
     <div style="max-width:540px; width:100%; box-sizing:border-box; margin:0 auto; background-color:#FFFFFF; border:1px solid #DCE5D8; border-radius:16px; padding:24px; font-family:sans-serif;">
-      <h2 style="color:#173D2C; margin-top:0;">${subjectPrefix}: #${order.orderNumber}</h2>
+      <h2 style="color:#173D2C; margin-top:0;">New Order Received — #${order.orderNumber}</h2>
       <p style="font-size:14px; color:#4A4E46;">
-        A new ${isCod ? "Cash on Delivery" : "prepaid online"} order has been placed on the Fruits &amp; Nuts storefront.
+        A ${subjectPrefix} has been placed on the Fruits &amp; Nuts storefront.
       </p>
       <div style="background-color:#FAF7F0; padding:12px 16px; border-radius:8px; margin:16px 0; font-size:13px; line-height:1.6;">
+        <strong>Order ID:</strong> #${order.orderNumber}<br>
+        <strong>Order Placed:</strong> ${creationTime}<br>
         <strong>Payable Amount:</strong> ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}<br>
-        <strong>Payment Method:</strong> ${paymentLabel} (Status: ${order.paymentStatus || (isCod ? "PENDING" : "PAID")})<br>
+        <strong>Payment Method:</strong> ${paymentLabel}<br>
+        <strong>Payment Status:</strong> ${paymentStatusDisplay}<br>
+        <strong>Order Status:</strong> ${orderStatusDisplay}<br>
         <strong>Customer:</strong> ${order.customerName || order.shippingRecipientName}<br>
+        <strong>Email:</strong> ${order.customerEmail || order.user?.email || "No email"}<br>
         <strong>Phone:</strong> ${order.shippingPhone || order.customerPhone || "N/A"}<br>
         <strong>Destination:</strong> ${order.shippingCity || ""}, ${order.shippingState || ""} (${order.shippingPostalCode || ""})<br>
-        <strong>Status:</strong> ${order.orderStatus}
+        <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #E5DEC9;">
+          <strong>Ordered Items (${(order.items || []).length} SKUs):</strong>
+          <ul style="margin:6px 0 0 0; padding-left:20px; font-size:12px; color:#57534E;">
+            ${adminItemsHtml || "<li>Order items listed in admin dashboard</li>"}
+          </ul>
+        </div>
       </div>
       <div style="text-align:center; margin-top:20px;">
-        <a href="${appOrigin}/admin/orders" style="background-color:#173D2C; color:#FFFFFF; padding:10px 20px; border-radius:8px; font-size:12px; font-weight:bold; text-decoration:none; display:inline-block;">
-          Open in Admin Dashboard &rarr;
+        <a href="${appOrigin}/admin/orders/${order.id || order.orderNumber}" style="background-color:#173D2C; color:#FFFFFF; padding:10px 20px; border-radius:8px; font-size:12px; font-weight:bold; text-decoration:none; display:inline-block;">
+          View Order Details &rarr;
         </a>
       </div>
     </div>
@@ -911,21 +1170,51 @@ Concierge: +91-8368301495 | fruitsnutswebsite@gmail.com
     `.trim();
 
     const textBody = `
-NEW ORDER RECEIVED: #${order.orderNumber}
-Payment: ${paymentLabel}
-Amount: ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}
-Customer: ${order.customerName || order.shippingRecipientName} (${order.shippingPhone || order.customerPhone})
+New Order Received — #${order.orderNumber}
+Order Time: ${creationTime}
+Payment Method: ${paymentLabel}
+Payment Status: ${paymentStatusDisplay}
+Order Status: ${orderStatusDisplay}
+Total Order Value: ₹${Number(order.finalPayableAmount).toLocaleString("en-IN")}
+Customer: ${order.customerName || order.shippingRecipientName}
+Email: ${order.customerEmail || order.user?.email || "No email"}
+Phone: ${order.shippingPhone || order.customerPhone || "N/A"}
 Destination: ${order.shippingCity || ""}, ${order.shippingPostalCode || ""}
-Dashboard: ${appOrigin}/admin/orders
+
+Ordered Products:
+${adminItemsText || "- Products listed in dashboard"}
+
+Dashboard: ${appOrigin}/admin/orders/${order.id || order.orderNumber}
     `.trim();
 
-    return this.dispatchEmail({
+    const dispatchResult = await this.dispatchEmail({
       to: adminEmail,
-      subject: `[Admin Alert] ${subjectPrefix}: #${order.orderNumber} (₹${order.finalPayableAmount})`,
+      subject: `New Order Received — #${order.orderNumber}`,
       html: htmlBody,
       text: textBody,
       emailType: isCod ? "ADMIN_COD_ORDER_ALERT" : "ADMIN_ONLINE_ORDER_ALERT",
     });
+
+    await this.recordNotificationAudit({
+      userId: order.userId,
+      eventType: "ADMIN_ORDER_ALERT",
+      channel: "EMAIL",
+      recipient: adminEmail,
+      payloadJson: {
+        orderId,
+        orderNumber: order.orderNumber,
+        paymentMethod: paymentLabel,
+        paymentStatus: paymentStatusDisplay,
+        orderStatus: orderStatusDisplay,
+        amount: Number(order.finalPayableAmount),
+        provider: dispatchResult.provider,
+        reason: dispatchResult.reason || null,
+      },
+      status: dispatchResult.sent ? "SENT" : "FAILED",
+      failureReason: dispatchResult.sent ? null : dispatchResult.reason || "Dispatch failed",
+    });
+
+    return dispatchResult;
   }
 
   /**

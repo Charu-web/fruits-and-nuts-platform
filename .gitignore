@@ -12,6 +12,8 @@ out/
 .env
 .env*.local
 !.env.example
+prisma_deploy.env
+
 
 # Security & Private Key Files
 *.pem

@@ -1449,8 +1449,40 @@ export class AuthService {
   /**
    * Provision or look up guest customer session user for frictionless checkout.
    */
-  static async getOrCreateGuestUser(input: { phone?: string | null; name?: string | null }): Promise<SessionUser> {
+  static async getOrCreateGuestUser(input: { phone?: string | null; name?: string | null; email?: string | null }): Promise<SessionUser> {
     const normalizedPhone = normalizeIndianPhone(input.phone);
+    const normalizedEmail = input.email ? input.email.trim().toLowerCase() : null;
+
+    if (normalizedEmail) {
+      const foundByEmailDev = DEV_USERS.find((u) => u.email === normalizedEmail);
+      if (foundByEmailDev) {
+        return {
+          id: foundByEmailDev.id,
+          email: foundByEmailDev.email,
+          phone: foundByEmailDev.phone,
+          roleId: foundByEmailDev.roleId,
+          isActive: foundByEmailDev.isActive,
+          name: foundByEmailDev.profile?.firstName ? `${foundByEmailDev.profile.firstName} ${foundByEmailDev.profile.lastName || ""}`.trim() : input.name || null,
+        };
+      }
+      try {
+        const foundByEmail = await db.user.findUnique({
+          where: { email: normalizedEmail },
+          include: { profile: true },
+        });
+        if (foundByEmail) {
+          return {
+            id: foundByEmail.id,
+            email: foundByEmail.email,
+            phone: foundByEmail.phone,
+            roleId: foundByEmail.roleId,
+            isActive: foundByEmail.isActive,
+            name: foundByEmail.profile?.firstName ? `${foundByEmail.profile.firstName} ${foundByEmail.profile.lastName || ""}`.trim() : input.name || null,
+          };
+        }
+      } catch {}
+    }
+
     if (normalizedPhone) {
       const foundDev = DEV_USERS.find((u) => u.phone === normalizedPhone);
       if (foundDev) {
@@ -1481,10 +1513,10 @@ export class AuthService {
       } catch {}
     }
 
-    const guestId = "usr_guest_" + Math.random().toString(36).substring(2, 9) + "_" + Date.now();
+    const guestId = crypto.randomUUID();
     const guestUser: DevStoredUser = {
       id: guestId,
-      email: null,
+      email: normalizedEmail,
       phone: normalizedPhone,
       passwordHash: "NOPASSWORD_GUEST",
       roleId: RoleType.CUSTOMER,
@@ -1504,6 +1536,7 @@ export class AuthService {
       await db.user.create({
         data: {
           id: guestId,
+          email: normalizedEmail,
           roleId: RoleType.CUSTOMER,
           phone: normalizedPhone,
           isActive: true,

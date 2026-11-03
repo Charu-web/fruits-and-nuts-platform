@@ -25,8 +25,12 @@ export async function POST(req: NextRequest) {
         typeof validated.shippingAddress === "object" && validated.shippingAddress?.recipientName
           ? validated.shippingAddress.recipientName
           : "Guest Customer";
+      const email =
+        typeof validated.shippingAddress === "object" && validated.shippingAddress?.email
+          ? validated.shippingAddress.email
+          : validated.customerEmail || null;
 
-      user = await AuthService.getOrCreateGuestUser({ phone, name });
+      user = await AuthService.getOrCreateGuestUser({ phone, name, email });
       if (user) {
         const token = await generateSessionToken(user);
         await setSessionCookie(token);

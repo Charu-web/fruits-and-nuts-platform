@@ -13,8 +13,8 @@ export type TransactionClient = Omit<
 export async function runTransaction<T>(
   action: (tx: TransactionClient) => Promise<T>,
   options?: {
-    maxWait?: number; // default: 5000ms
-    timeout?: number; // default: 10000ms
+    maxWait?: number; // default: 15000ms
+    timeout?: number; // default: 30000ms
     isolationLevel?: Prisma.TransactionIsolationLevel;
   }
 ): Promise<T> {
@@ -23,9 +23,9 @@ export async function runTransaction<T>(
       return await action(tx as TransactionClient);
     },
     {
-      maxWait: options?.maxWait ?? 5000,
-      timeout: options?.timeout ?? 10000,
-      isolationLevel: options?.isolationLevel ?? Prisma.TransactionIsolationLevel.RepeatableRead,
+      maxWait: options?.maxWait ?? 15000,
+      timeout: options?.timeout ?? 30000,
+      isolationLevel: options?.isolationLevel ?? Prisma.TransactionIsolationLevel.ReadCommitted,
     }
   );
 }
@@ -38,12 +38,14 @@ export async function acquireVariantRowLocks(
   tx: TransactionClient,
   variantIds: string[]
 ): Promise<void> {
-  if (variantIds.length === 0) return;
+  const validIds = variantIds.filter((id) => typeof id === "string" && id.trim().length > 0);
+  if (validIds.length === 0) return;
 
   // Execute raw parameterized query within transaction to acquire exclusive row-level locks
+  // Cast id::text to ensure compatibility with parameterized string array in PostgreSQL
   const query = Prisma.sql`
     SELECT id FROM product_variants 
-    WHERE id IN (${Prisma.join(variantIds)}) 
+    WHERE id::text IN (${Prisma.join(validIds)}) 
     FOR UPDATE;
   `;
 

@@ -14,6 +14,7 @@ export default function AdminNewProductPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -49,29 +50,57 @@ export default function AdminNewProductPage() {
   const [primaryImageUrl, setPrimaryImageUrl] = useState("");
   const [primaryImageAlt, setPrimaryImageAlt] = useState("");
 
-  // Load Categories on mount
-  useEffect(() => {
-    async function loadCategories() {
-      try {
-        setIsLoadingCategories(true);
-        const res = await fetch("/api/v1/categories");
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && json.data) {
-            setCategories(json.data);
-            if (json.data.length > 0) {
-              setCategoryId(json.data[0].id);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load categories", err);
-      } finally {
-        setIsLoadingCategories(false);
+  // Load Categories on mount with timeout and retry support
+  const loadCategories = async () => {
+    try {
+      setIsLoadingCategories(true);
+      setCategoryError(null);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch("/api/v1/categories", {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
       }
+
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        setCategories(json.data);
+        setCategoryId((prev) => (prev ? prev : json.data[0].id));
+      } else {
+        throw new Error("No categories received from server.");
+      }
+    } catch (err: any) {
+      console.error("Failed to load categories:", err);
+      const message =
+        err.name === "AbortError"
+          ? "Request timed out while loading categories. Please retry."
+          : err.message || "Failed to load categories.";
+      setCategoryError(message);
+    } finally {
+      setIsLoadingCategories(false);
     }
+  };
+
+  useEffect(() => {
     loadCategories();
   }, []);
+
+  const handleCategoryChange = (val: string) => {
+    const numId = val ? Number(val) : "";
+    setCategoryId(numId);
+    setSubcategoryId("");
+  };
+
+  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const subcategories = selectedCategory?.subcategories || [];
 
   // Auto-generate slug and SKU base from product name
   const handleNameChange = (val: string) => {
@@ -237,7 +266,7 @@ export default function AdminNewProductPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block mb-1">
                 SKU Base *
@@ -253,17 +282,31 @@ export default function AdminNewProductPage() {
             </div>
 
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block mb-1">
-                Primary Category *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block">
+                  Primary Category *
+                </label>
+                {categoryError && (
+                  <button
+                    type="button"
+                    onClick={loadCategories}
+                    className="text-[10px] text-amber-700 font-bold underline hover:text-amber-800"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
               <select
                 required
                 value={categoryId}
-                onChange={(e) => setCategoryId(Number(e.target.value))}
-                className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium focus:outline-none focus:border-amber-500"
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                disabled={isLoadingCategories}
+                className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium focus:outline-none focus:border-amber-500 disabled:opacity-60"
               >
                 {isLoadingCategories ? (
-                  <option value="">Loading categories...</option>
+                  <option value="">⏳ Loading categories...</option>
+                ) : categories.length === 0 ? (
+                  <option value="">⚠️ No categories found</option>
                 ) : (
                   categories.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -271,6 +314,32 @@ export default function AdminNewProductPage() {
                     </option>
                   ))
                 )}
+              </select>
+              {categoryError && (
+                <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-medium">
+                  <span>⚠️</span> {categoryError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block mb-1">
+                Subcategory (Optional)
+              </label>
+              <select
+                value={subcategoryId}
+                onChange={(e) => setSubcategoryId(e.target.value ? Number(e.target.value) : "")}
+                disabled={isLoadingCategories || subcategories.length === 0}
+                className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium focus:outline-none focus:border-amber-500 disabled:opacity-50"
+              >
+                <option value="">
+                  {subcategories.length === 0 ? "None available" : "-- Select Subcategory --"}
+                </option>
+                {subcategories.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {sub.name}
+                  </option>
+                ))}
               </select>
             </div>
 
