@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCart } from "@/components/cart/cart-context";
 import Link from "next/link";
 import {
@@ -12,6 +12,9 @@ import {
   ArrowRight,
   ShoppingBag,
   CheckCircle2,
+  Plus,
+  Minus,
+  Trash2,
 } from "lucide-react";
 import { ProductImageFrame } from "@/components/catalog/product-image-frame";
 import { getProductImageUrl } from "@/lib/catalog/product-asset-registry";
@@ -33,7 +36,7 @@ interface AddressForm {
 }
 
 export default function CheckoutPage() {
-  const { cart, isCartLoading, refreshCart } = useCart();
+  const { cart, isCartLoading, refreshCart, updateQuantity, removeItem } = useCart();
 
   const [form, setForm] = useState<AddressForm>({
     recipientName: "",
@@ -48,6 +51,19 @@ export default function CheckoutPage() {
     gstin: "",
     companyName: "",
   });
+
+  // Hydrate checkout address form from sessionStorage on mount so customer input is never lost
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("fn_checkout_address");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          setForm((prev) => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch {}
+  }, []);
 
   const paymentMethod: "COD" = "COD";
   const [includeGstInvoice, setIncludeGstInvoice] = useState(false);
@@ -68,7 +84,13 @@ export default function CheckoutPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      const updated = { ...prev, [name]: value };
+      try {
+        sessionStorage.setItem("fn_checkout_address", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
@@ -145,7 +167,10 @@ export default function CheckoutPage() {
         throw new Error("Order confirmed but missing reference ID. Please check your account.");
       }
 
-      // 2. Direct COD Flow: Clear cart and route straight to order confirmation
+      // 2. Direct COD Flow: Clear cart and address session cache, and route straight to order confirmation
+      try {
+        sessionStorage.removeItem("fn_checkout_address");
+      } catch {}
       await refreshCart();
       window.location.href = `/checkout/success/${orderId}`;
     } catch (err: any) {
@@ -491,17 +516,55 @@ export default function CheckoutPage() {
                     />
                   </div>
                   <div className="min-w-0">
-                    <span className="font-bold text-[#173D2C] block truncate max-w-[170px] sm:max-w-[200px]">
+                    <span className="font-bold text-[#173D2C] block truncate max-w-[130px] sm:max-w-[160px]">
                       {item.variant.product?.name}
                     </span>
                     <span className="text-[#5F6D65] text-[11px] block">
-                      Qty: {item.quantity} • {item.variant.weightGrams >= 1000 ? `${item.variant.weightGrams / 1000}kg` : `${item.variant.weightGrams}g`}
+                      {item.variant.weightGrams >= 1000 ? `${item.variant.weightGrams / 1000}kg` : `${item.variant.weightGrams}g`} • {formatPrice(item.variant.sellingPrice)}
                     </span>
                   </div>
                 </div>
-                <span className="font-bold text-[#173D2C] whitespace-nowrap shrink-0">
-                  {formatPrice(item.variant.sellingPrice * item.quantity)}
-                </span>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Inline Quantity Controls */}
+                  <div className="flex items-center border border-[#E5DEC9] rounded-lg bg-[#FAF7F0] overflow-hidden">
+                    <button
+                      type="button"
+                      aria-label={`Decrease quantity of ${item.variant.product?.name || "item"}`}
+                      onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                      disabled={item.quantity <= 1}
+                      className="px-1.5 py-1 text-[#173D2C] hover:bg-[#E5DEC9]/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="px-1.5 text-xs font-bold text-[#173D2C] min-w-[18px] text-center">
+                      {item.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Increase quantity of ${item.variant.product?.name || "item"}`}
+                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      className="px-1.5 py-1 text-[#173D2C] hover:bg-[#E5DEC9]/50 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* Remove Item Button */}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${item.variant.product?.name || "item"} from checkout`}
+                    onClick={() => removeItem(item.id)}
+                    className="p-1 text-[#8C733E] hover:text-rose-700 transition-colors cursor-pointer"
+                    title="Remove item"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <span className="font-bold text-[#173D2C] whitespace-nowrap min-w-[55px] text-right">
+                    {formatPrice(item.variant.sellingPrice * item.quantity)}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
