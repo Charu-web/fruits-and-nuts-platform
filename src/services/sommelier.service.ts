@@ -107,13 +107,14 @@ ${JSON.stringify(catalogSummary)}`;
       // 4. Initialize official @google/genai client
       const ai = new GoogleGenAI({ apiKey });
 
-      // Supported model cascade: prioritizes user override, then gemini-2.5-flash, gemini-flash-latest, gemini-2.5-flash-lite, gemini-2.5-pro
+      // Supported model cascade: prioritizes user override, then Google's recommended gemini-3.8-flash, gemini-flash-latest, gemini-3.5-flash-lite, gemini-flash-lite-latest, gemini-pro-latest
       const candidateModels = [
         process.env.GEMINI_MODEL?.trim(),
-        "gemini-2.5-flash",
+        "gemini-3.8-flash",
         "gemini-flash-latest",
-        "gemini-2.5-flash-lite",
-        "gemini-2.5-pro",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemini-pro-latest",
       ].filter(Boolean) as string[];
 
       // 5. Execute with 5000ms timeout guard
