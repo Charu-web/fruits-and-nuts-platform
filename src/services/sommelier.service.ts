@@ -106,7 +106,15 @@ ${JSON.stringify(catalogSummary)}`;
 
       // 4. Initialize official @google/genai client
       const ai = new GoogleGenAI({ apiKey });
-      const modelName = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+
+      // Supported model cascade: prioritizes user override, then gemini-2.0-flash, gemini-2.0-flash-lite, gemini-1.5-flash-latest
+      const candidateModels = [
+        process.env.GEMINI_MODEL?.trim(),
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash",
+      ].filter(Boolean) as string[];
 
       // 5. Execute with 5000ms timeout guard
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -114,22 +122,11 @@ ${JSON.stringify(catalogSummary)}`;
       );
 
       const generatePromise = (async () => {
-        try {
-          return await ai.models.generateContent({
-            model: modelName,
-            contents,
-            config: {
-              systemInstruction,
-              responseMimeType: "application/json",
-              temperature: 0.2,
-              maxOutputTokens: 800,
-            },
-          });
-        } catch (firstErr: any) {
-          // If gemini-2.5-flash fails with not found or unsupported, fallback to gemini-1.5-flash
-          if (modelName !== "gemini-1.5-flash") {
-            return await ai.models.generateContent({
-              model: "gemini-1.5-flash",
+        let lastError: any = null;
+        for (const model of candidateModels) {
+          try {
+            const res = await ai.models.generateContent({
+              model,
               contents,
               config: {
                 systemInstruction,
@@ -138,9 +135,14 @@ ${JSON.stringify(catalogSummary)}`;
                 maxOutputTokens: 800,
               },
             });
+            if (res && res.text) {
+              return res;
+            }
+          } catch (modelErr: any) {
+            lastError = modelErr;
           }
-          throw firstErr;
         }
+        throw lastError || new Error("All candidate Gemini models failed.");
       })();
 
       const response = await Promise.race([generatePromise, timeoutPromise]);
