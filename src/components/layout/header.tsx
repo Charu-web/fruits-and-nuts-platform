@@ -115,9 +115,9 @@ export function Header() {
     <>
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E5DEC9] transition-all">
         {/* Main Header Bar */}
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
-            {/* Left: Mobile Menu Trigger */}
+        <div className="max-w-[1440px] 2xl:max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-20 gap-4 lg:gap-6">
+            {/* Left: Mobile Menu Trigger (Mobile only) */}
             <div className="flex items-center lg:hidden shrink-0">
               <button
                 type="button"
@@ -135,30 +135,37 @@ export function Header() {
               </button>
             </div>
 
-            {/* Center-Left: Brand Logo & Wordmark */}
-            <div className="flex items-center min-w-0">
-              <Link href="/" className="flex flex-col items-center group">
-                <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Left: Brand Identity Lockup (Logo Mark + Brand Name + Tagline) */}
+            <div className="flex items-center shrink-0">
+              <Link
+                href="/"
+                className="flex flex-col items-start group shrink-0 select-none py-1"
+                aria-label="Fruits & Nuts Home"
+              >
+                <div className="flex items-center gap-2 sm:gap-2.5">
                   <img
                     src="/images/logo.jpg"
                     alt="Fruits & Nuts Official Logo"
-                    className="h-7 sm:h-9 w-auto object-contain rounded-md bg-white px-1 py-0.5 border border-[#B89453]/60 shadow-xs group-hover:border-[#B89453] group-hover:scale-105 transition-all"
+                    className="h-8 sm:h-9 w-auto object-contain rounded-md bg-white px-1 py-0.5 border border-[#B89453]/60 shadow-xs group-hover:border-[#B89453] group-hover:scale-105 transition-all shrink-0"
                   />
-                  <span className="font-serif text-base sm:text-xl font-bold tracking-[0.06em] sm:tracking-[0.08em] text-[#173D2C] group-hover:text-[#987B3E] transition-colors leading-none whitespace-nowrap">
+                  <span className="font-serif text-lg sm:text-xl font-bold tracking-[0.08em] text-[#173D2C] group-hover:text-[#987B3E] transition-colors leading-none whitespace-nowrap">
                     FRUITS &amp; NUTS
                   </span>
                 </div>
-                <span className="text-[8.5px] sm:text-[10.5px] tracking-[0.16em] sm:tracking-[0.2em] text-[#7E5E1E] font-bold text-center w-full pt-1 truncate">
+                <span className="text-[9px] sm:text-[10px] tracking-[0.2em] uppercase text-[#7E5E1E] font-bold whitespace-nowrap pt-1 pl-0.5">
                   Nutrition with an Emotion
                 </span>
               </Link>
             </div>
 
-            {/* Center: Desktop Navigation Quick Highlights */}
-            <div className="hidden xl:flex items-center gap-6">
+            {/* Center: Desktop Navigation Quick Highlights & Experience */}
+            <nav
+              aria-label="Experience Highlights"
+              className="hidden xl:flex items-center justify-center gap-2.5 2xl:gap-5 flex-1 px-2"
+            >
               <Link
                 href="/build-your-own-box"
-                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#987B3E] px-3 py-1.5 rounded-full bg-[#FAF7F0] border border-[#B89453]/40 hover:border-[#B89453] transition-all"
+                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#987B3E] px-3 py-1.5 rounded-full bg-[#FAF7F0] border border-[#B89453]/40 hover:border-[#B89453] transition-all whitespace-nowrap shrink-0"
               >
                 <Sparkles className="w-3.5 h-3.5 text-[#B89453]" />
                 <span>Bespoke Box</span>
@@ -169,7 +176,7 @@ export function Header() {
 
               <Link
                 href="/gifting"
-                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#987B3E] px-3 py-1.5 rounded-full bg-[#FAF7F0] border border-[#B89453]/40 hover:border-[#B89453] transition-all"
+                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#987B3E] px-3 py-1.5 rounded-full bg-[#FAF7F0] border border-[#B89453]/40 hover:border-[#B89453] transition-all whitespace-nowrap shrink-0"
               >
                 <Gift className="w-3.5 h-3.5 text-[#B89453]" />
                 <span>Gift Finder</span>
@@ -177,7 +184,7 @@ export function Header() {
 
               <Link
                 href="/taste-map"
-                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#B89453] transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#B89453] transition-colors whitespace-nowrap shrink-0 px-2 py-1"
               >
                 <MapPin className="w-3.5 h-3.5 text-[#B89453]" />
                 <span>India Taste Map</span>
@@ -189,7 +196,7 @@ export function Header() {
                 onClick={() => setIsMegaMenuOpen(!isMegaMenuOpen)}
                 aria-expanded={isMegaMenuOpen}
                 aria-haspopup="true"
-                className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#B89453] transition-colors cursor-pointer py-1"
+                className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#B89453] transition-colors cursor-pointer py-1 px-2 whitespace-nowrap shrink-0"
               >
                 <span>Curated Reserve</span>
                 <ChevronDown
@@ -198,21 +205,21 @@ export function Header() {
                   }`}
                 />
               </button>
-            </div>
 
-            {/* Right: Utility Actions (Search, Account, Wishlist, Cart) */}
-            <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
               {/* Gourmet Concierge Advisory Trigger */}
               <button
                 type="button"
                 onClick={() => window.dispatchEvent(new CustomEvent("open-sommelier"))}
-                className="hidden md:inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#987B3E] px-3 py-1.5 rounded-full bg-[#FAF7F0] border border-[#B89453]/40 hover:border-[#B89453] transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#173D2C] hover:text-[#987B3E] px-3 py-1.5 rounded-full bg-[#FAF7F0] border border-[#B89453]/40 hover:border-[#B89453] transition-all cursor-pointer whitespace-nowrap shrink-0"
                 title="Gourmet Concierge & Advisory"
               >
                 <Sparkles className="w-3.5 h-3.5 text-[#B89453]" />
                 <span>Concierge</span>
               </button>
+            </nav>
 
+            {/* Right: Customer Utility Actions (Search, Account, Wishlist, Bag) */}
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
               {/* Search Trigger Button with shortcut pill */}
               <button
                 type="button"
@@ -222,7 +229,7 @@ export function Header() {
               >
                 <Search className="w-4 h-4 sm:w-4 sm:h-4" />
                 <span className="hidden sm:inline text-xs text-[#5F6D65]">Search...</span>
-                <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono text-[#5F6D65] bg-[#FAF7F0] border border-[#E5DEC9] rounded">
+                <kbd className="hidden lg:inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono text-[#5F6D65] bg-[#FAF7F0] border border-[#E5DEC9] rounded">
                   ⌘K
                 </kbd>
               </button>
@@ -274,7 +281,7 @@ export function Header() {
           aria-label="Primary Category Navigation"
           className="hidden lg:block border-t border-[#E5DEC9] bg-[#FAF7F0]/95"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
             <ul className="flex items-center justify-between py-2 overflow-x-auto text-[11px] font-bold uppercase tracking-[0.16em] text-[#173D2C]">
               {MAIN_NAV_ITEMS.map((item) => {
                 const isActive = pathname === item.href;
@@ -324,10 +331,10 @@ export function Header() {
                     className="h-8 w-auto object-contain rounded bg-white px-1 py-0.5 border border-[#B89453]/50"
                   />
                   <div className="flex flex-col">
-                    <span className="font-serif text-sm font-bold text-[#173D2C]">
-                      M/S Fruits & Nuts
+                    <span className="font-serif text-sm sm:text-base font-bold tracking-[0.06em] text-[#173D2C]">
+                      FRUITS &amp; NUTS
                     </span>
-                    <span className="text-[8px] tracking-[0.12em] text-[#987B3E] font-medium">
+                    <span className="text-[8.5px] tracking-[0.16em] uppercase text-[#7E5E1E] font-bold">
                       Nutrition with an Emotion
                     </span>
                   </div>
