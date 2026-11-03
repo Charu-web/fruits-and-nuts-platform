@@ -111,7 +111,7 @@ ${JSON.stringify(catalogSummary)}`;
       const candidateModels = [
         process.env.GEMINI_MODEL?.trim(),
         "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
+        "gemini-2.0-flash-001",
         "gemini-1.5-flash-latest",
         "gemini-1.5-flash",
       ].filter(Boolean) as string[];
@@ -136,12 +136,27 @@ ${JSON.stringify(catalogSummary)}`;
               },
             });
             if (res && res.text) {
+              console.log(`[SommelierService] Successfully generated live response using model: ${model}`);
               return res;
             }
           } catch (modelErr: any) {
+            console.warn(`[SommelierService] Model '${model}' failed: ${modelErr?.message || "unknown error"}`);
             lastError = modelErr;
           }
         }
+
+        // Diagnostic: list available models to server logs if all candidates fail
+        try {
+          const listResponse = await ai.models.list();
+          const modelNames: string[] = [];
+          for await (const m of listResponse) {
+            if (m.name) modelNames.push(m.name);
+          }
+          console.warn(`[SommelierService] Available models for this key: ${modelNames.slice(0, 10).join(", ")}`);
+        } catch (listErr: any) {
+          console.warn(`[SommelierService] Could not list models: ${listErr?.message}`);
+        }
+
         throw lastError || new Error("All candidate Gemini models failed.");
       })();
 
