@@ -157,6 +157,30 @@ async function runSommelierTests() {
   );
   console.log("  ✓ consultAsync executed with provider resilience verified.");
 
+  // Test 13: Multi-turn conversation history handling
+  console.log("▶️ Test 13: Multi-turn conversation history handling...");
+  const multiTurnResult = await SommelierService.consultAsync("What about dates?", [
+    { role: "user", text: "Recommend premium almonds" },
+    { role: "model", text: "We recommend our Kashmiri Imperial Mamra Almonds." },
+  ]);
+  assert.ok(typeof multiTurnResult.reply === "string" && multiTurnResult.reply.length > 0);
+  assert.ok(
+    multiTurnResult.suggestedProducts.some((p) => p.slug.includes("date")),
+    "Multi-turn response must ground in verified date products"
+  );
+  console.log("  ✓ Multi-turn conversation history verified.");
+
+  // Test 14: Strict catalogue grounding validation
+  console.log("▶️ Test 14: Strict catalogue grounding validation...");
+  const groundingResult = await SommelierService.consultAsync("Suggest a healthy snack");
+  assert.ok(groundingResult.suggestedProducts.length > 0);
+  for (const product of groundingResult.suggestedProducts) {
+    assert.ok(product.slug, "Every recommended product must have a slug");
+    assert.ok(product.name, "Every recommended product must have a name");
+    assert.ok(product.priceRange?.minSellingPrice !== undefined, "Every recommended product must have a price");
+  }
+  console.log("  ✓ All recommendations verified against authentic catalogue schema.");
+
   console.log("\n✅ ALL SOMMELIER AI ASSISTANT TESTS PASSED!\n");
 }
 

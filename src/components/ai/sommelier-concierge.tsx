@@ -104,12 +104,20 @@ export function SommelierConcierge() {
       let response: SommelierResponse;
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+        const historyPayload = messages
+          .filter((m) => m.id !== "msg-welcome")
+          .slice(-6)
+          .map((m) => ({
+            role: m.sender === "user" ? ("user" as const) : ("model" as const),
+            text: m.text,
+          }));
 
         const res = await fetch("/api/v1/ai/sommelier", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: textToSend }),
+          body: JSON.stringify({ message: textToSend, history: historyPayload }),
           signal: controller.signal,
         });
         clearTimeout(timeoutId);

@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import {
   STOREFRONT_PRODUCTS,
 } from "@/lib/catalog/storefront-catalog";
@@ -8,6 +9,11 @@ export interface SommelierResponse {
   suggestedProducts: ProductCardProps[];
   quickPrompts: string[];
   provider: "catalog_rule_engine" | "live_ai";
+}
+
+export interface ChatTurn {
+  role: "user" | "model";
+  text: string;
 }
 
 export class SommelierService {
@@ -22,12 +28,16 @@ export class SommelierService {
 
   /**
    * Asynchronous AI consultation entrypoint.
-   * Leverages Gemini Live API when GEMINI_API_KEY is configured in the environment,
+   * Leverages official @google/genai SDK when GEMINI_API_KEY is configured,
    * grounded strictly within the authentic product catalog.
+   * Supports multi-turn conversation history.
    * Seamlessly falls back to the deterministic catalog rule engine if unconfigured,
-   * timed out, or on network failure.
+   * timed out, or on network / rate limit failure.
    */
-  static async consultAsync(query: string): Promise<SommelierResponse> {
+  static async consultAsync(
+    query: string,
+    history?: ChatTurn[]
+  ): Promise<SommelierResponse> {
     if (!this.isLiveAiConfigured()) {
       return this.consult(query);
     }
@@ -40,75 +50,107 @@ export class SommelierService {
     }
 
     try {
-      // Build catalog context for grounding
+      // 1. Build catalog summary for grounding
       const catalogSummary = STOREFRONT_PRODUCTS.map((p) => ({
         name: p.name,
         slug: p.slug,
         category: p.category?.name || "General",
         minPrice: p.priceRange?.minSellingPrice || 0,
         maxPrice: p.priceRange?.maxSellingPrice || 0,
+        unit: p.variants?.[0]?.unit || "GRAMS",
+        weightGrams: p.variants?.[0]?.weightGrams || 250,
         inStock: p.stockStatus === "IN_STOCK",
       }));
 
-      const systemPrompt = `You are the Royal Gourmet Sommelier for "Fruits & Nuts", an imperial luxury dry fruits, dates, nuts, and teas purveyor in India.
-Your mission is to provide courteous, sophisticated, and authentic shopping guidance.
-STRICT RULES:
-1. ONLY recommend products that exist in the following catalogue list. Use the exact product slugs provided.
-2. NEVER invent non-existent products, prices, or false stock statuses.
-3. NEVER make unsupported medical, disease-treatment, or cure claims (you may mention low GI, raw natural nutrition, or protein, but always advise consulting a physician).
-4. Keep answers concise, elegant, and informative (2 to 4 sentences).
-5. Output ONLY valid JSON in this exact structure:
+      // 2. System Instruction for Royal Gourmet Sommelier
+      const systemInstruction = `You are the "Royal Gourmet Sommelier" — the intelligent, courteous shopping concierge for M/S Fruits & Nuts (fruitsandnuts.co.in), a premier purveyor of single-origin dry fruits, dates, nuts, artisanal teas, and luxury gift caskets in India.
+
+CRITICAL OPERATIONAL RULES:
+1. COMMUNICATE NATURALLY & ELEGANTLY: Provide courteous, concise, and helpful advice (2 to 4 sentences). Address the customer with refined warmth.
+2. VERIFIED CATALOGUE GROUNDING: Recommend ONLY products that exist in the catalogue list below. Reference them by their exact slugs in "suggestedProductSlugs".
+3. NEVER INVENT PRODUCTS OR PRICES: Never invent product names, fake prices, unverified discounts, false stock statuses, or delivery promises.
+4. NO MEDICAL OR DISEASE-TREATMENT CLAIMS: Never claim to cure, treat, or prevent any illness or disease. You may mention natural dietary aspects (e.g. natural source of fiber, protein, low GI, zero added refined sugar), but always advise consulting a personal physician for specific medical conditions.
+5. NO UNAUTHORIZED ORDER/PAYMENT CLAIMS: Never claim that an item was added, an order was placed, or a payment succeeded unless confirmed by the system.
+6. CLARIFY IF UNMATCHED: If the customer asks for something not in the catalogue or unrelated, politely clarify what royal harvests are available or guide them to relevant sections.
+7. OUTPUT FORMAT: Respond strictly in valid JSON matching this schema:
 {
-  "reply": "Your courteous culinary advice here.",
-  "suggestedProductSlugs": ["slug-1", "slug-2"],
-  "quickPrompts": ["Next prompt 1", "Next prompt 2", "Next prompt 3"]
+  "reply": "Your natural, elegant response to the customer.",
+  "suggestedProductSlugs": ["exact-slug-1", "exact-slug-2"],
+  "quickPrompts": ["Relevant question 1", "Relevant question 2", "Relevant question 3"]
 }
 
-CATALOGUE PRODUCTS:
+VERIFIED CATALOGUE:
 ${JSON.stringify(catalogSummary)}`;
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-
-      // Call Google Gemini 1.5 Flash endpoint
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  { text: systemPrompt },
-                  { text: `Customer question: "${cleanQuery}"` },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 600,
-              responseMimeType: "application/json",
-            },
-          }),
-          signal: controller.signal,
+      // 3. Format validated multi-turn conversation history
+      const formattedHistory: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = [];
+      if (Array.isArray(history)) {
+        for (const turn of history.slice(-6)) {
+          if (
+            (turn.role === "user" || turn.role === "model") &&
+            typeof turn.text === "string" &&
+            turn.text.trim()
+          ) {
+            formattedHistory.push({
+              role: turn.role,
+              parts: [{ text: turn.text.trim().substring(0, 500) }],
+            });
+          }
         }
-      );
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        console.warn(`[SommelierService] Gemini API returned status ${response.status}. Using deterministic fallback.`);
-        return this.consult(cleanQuery);
       }
 
-      const data = await response.json();
-      const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const contents = [
+        ...formattedHistory,
+        { role: "user" as const, parts: [{ text: cleanQuery.substring(0, 1000) }] },
+      ];
+
+      // 4. Initialize official @google/genai client
+      const ai = new GoogleGenAI({ apiKey });
+      const modelName = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+
+      // 5. Execute with 5000ms timeout guard
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Gemini API call timed out after 5000ms")), 5000)
+      );
+
+      const generatePromise = (async () => {
+        try {
+          return await ai.models.generateContent({
+            model: modelName,
+            contents,
+            config: {
+              systemInstruction,
+              responseMimeType: "application/json",
+              temperature: 0.2,
+              maxOutputTokens: 800,
+            },
+          });
+        } catch (firstErr: any) {
+          // If gemini-2.5-flash fails with not found or unsupported, fallback to gemini-1.5-flash
+          if (modelName !== "gemini-1.5-flash") {
+            return await ai.models.generateContent({
+              model: "gemini-1.5-flash",
+              contents,
+              config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                temperature: 0.2,
+                maxOutputTokens: 800,
+              },
+            });
+          }
+          throw firstErr;
+        }
+      })();
+
+      const response = await Promise.race([generatePromise, timeoutPromise]);
+      const candidateText = response.text?.trim() || "";
 
       if (!candidateText) {
         return this.consult(cleanQuery);
       }
 
+      // 6. Parse structured response
       let parsed: { reply?: string; suggestedProductSlugs?: string[]; quickPrompts?: string[] } = {};
       try {
         parsed = JSON.parse(candidateText);
@@ -118,12 +160,13 @@ ${JSON.stringify(catalogSummary)}`;
       }
 
       if (parsed.reply && typeof parsed.reply === "string") {
-        const slugs = Array.isArray(parsed.suggestedProductSlugs) ? parsed.suggestedProductSlugs : [];
-        const suggestedProducts = this.findProductsBySlugs(slugs);
+        // 7. Grounding validation: ensure recommended slugs actually exist in STOREFRONT_PRODUCTS
+        const rawSlugs = Array.isArray(parsed.suggestedProductSlugs) ? parsed.suggestedProductSlugs : [];
+        const validatedProducts = this.findProductsBySlugs(rawSlugs);
 
-        // Fallback to keyword matching if Gemini returned invalid slugs
+        // Fallback to keyword matching if Gemini suggested non-existent products
         const finalProducts =
-          suggestedProducts.length > 0 ? suggestedProducts : this.consult(cleanQuery).suggestedProducts;
+          validatedProducts.length > 0 ? validatedProducts : this.consult(cleanQuery).suggestedProducts;
 
         return {
           reply: parsed.reply,
@@ -142,7 +185,10 @@ ${JSON.stringify(catalogSummary)}`;
 
       return this.consult(cleanQuery);
     } catch (err: any) {
-      console.warn("[SommelierService] Gemini live invocation bypassed or timed out:", err?.message);
+      // Gracefully fall back to deterministic catalogue rule engine
+      console.warn(
+        `[SommelierService] Gemini live AI consultation bypassed (${err?.message || "unknown"}). Falling back to Catalogue Rule Engine.`
+      );
       return this.consult(cleanQuery);
     }
   }
@@ -203,7 +249,6 @@ ${JSON.stringify(catalogSummary)}`;
       q.includes("under 500") ||
       q.includes("under ₹500")
     ) {
-      // Find actual in-stock products with minimum selling price <= 1000
       const products = this.findProductsBySlugs([
         "king-cashews-w180",
         "kashmir-snow-walnuts",

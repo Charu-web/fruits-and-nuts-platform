@@ -36,6 +36,7 @@
     "test": "node --import tsx --test --test-concurrency=1 src/test/*.test.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.32.0",
     "@prisma/client": "^6.1.0",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
