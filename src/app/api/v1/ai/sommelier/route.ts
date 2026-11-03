@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       throw AppError.validation("Message exceeds maximum allowable length of 1000 characters.");
     }
 
-    const result = SommelierService.consult(message);
+    const result = await SommelierService.consultAsync(message);
     return apiSuccess(result, 200, { requestId });
   } catch (error) {
     return apiError(error, requestId);
@@ -32,6 +32,6 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   const requestId = await getRequestId();
   // Returns initial sommelier greeting & starting prompts
-  const result = SommelierService.consult("");
+  const result = await SommelierService.consultAsync("");
   return apiSuccess(result, 200, { requestId });
 }

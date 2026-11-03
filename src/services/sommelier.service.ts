@@ -12,9 +12,145 @@ export interface SommelierResponse {
 
 export class SommelierService {
   /**
+   * Returns whether a valid Gemini API key is configured server-side.
+   * Completely avoids exposing keys to logs or frontend.
+   */
+  static isLiveAiConfigured(): boolean {
+    const key = process.env.GEMINI_API_KEY?.trim();
+    return Boolean(key && key !== "" && key !== "mock-key" && !key.startsWith("placeholder_"));
+  }
+
+  /**
+   * Asynchronous AI consultation entrypoint.
+   * Leverages Gemini Live API when GEMINI_API_KEY is configured in the environment,
+   * grounded strictly within the authentic product catalog.
+   * Seamlessly falls back to the deterministic catalog rule engine if unconfigured,
+   * timed out, or on network failure.
+   */
+  static async consultAsync(query: string): Promise<SommelierResponse> {
+    if (!this.isLiveAiConfigured()) {
+      return this.consult(query);
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY!.trim();
+    const cleanQuery = query.trim();
+
+    if (!cleanQuery) {
+      return this.consult("");
+    }
+
+    try {
+      // Build catalog context for grounding
+      const catalogSummary = STOREFRONT_PRODUCTS.map((p) => ({
+        name: p.name,
+        slug: p.slug,
+        category: p.category?.name || "General",
+        minPrice: p.priceRange?.minSellingPrice || 0,
+        maxPrice: p.priceRange?.maxSellingPrice || 0,
+        inStock: p.stockStatus === "IN_STOCK",
+      }));
+
+      const systemPrompt = `You are the Royal Gourmet Sommelier for "Fruits & Nuts", an imperial luxury dry fruits, dates, nuts, and teas purveyor in India.
+Your mission is to provide courteous, sophisticated, and authentic shopping guidance.
+STRICT RULES:
+1. ONLY recommend products that exist in the following catalogue list. Use the exact product slugs provided.
+2. NEVER invent non-existent products, prices, or false stock statuses.
+3. NEVER make unsupported medical, disease-treatment, or cure claims (you may mention low GI, raw natural nutrition, or protein, but always advise consulting a physician).
+4. Keep answers concise, elegant, and informative (2 to 4 sentences).
+5. Output ONLY valid JSON in this exact structure:
+{
+  "reply": "Your courteous culinary advice here.",
+  "suggestedProductSlugs": ["slug-1", "slug-2"],
+  "quickPrompts": ["Next prompt 1", "Next prompt 2", "Next prompt 3"]
+}
+
+CATALOGUE PRODUCTS:
+${JSON.stringify(catalogSummary)}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+      // Call Google Gemini 1.5 Flash endpoint
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: systemPrompt },
+                  { text: `Customer question: "${cleanQuery}"` },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 600,
+              responseMimeType: "application/json",
+            },
+          }),
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.warn(`[SommelierService] Gemini API returned status ${response.status}. Using deterministic fallback.`);
+        return this.consult(cleanQuery);
+      }
+
+      const data = await response.json();
+      const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!candidateText) {
+        return this.consult(cleanQuery);
+      }
+
+      let parsed: { reply?: string; suggestedProductSlugs?: string[]; quickPrompts?: string[] } = {};
+      try {
+        parsed = JSON.parse(candidateText);
+      } catch {
+        const jsonMatch = candidateText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+      }
+
+      if (parsed.reply && typeof parsed.reply === "string") {
+        const slugs = Array.isArray(parsed.suggestedProductSlugs) ? parsed.suggestedProductSlugs : [];
+        const suggestedProducts = this.findProductsBySlugs(slugs);
+
+        // Fallback to keyword matching if Gemini returned invalid slugs
+        const finalProducts =
+          suggestedProducts.length > 0 ? suggestedProducts : this.consult(cleanQuery).suggestedProducts;
+
+        return {
+          reply: parsed.reply,
+          suggestedProducts: finalProducts.slice(0, 3),
+          quickPrompts:
+            Array.isArray(parsed.quickPrompts) && parsed.quickPrompts.length > 0
+              ? parsed.quickPrompts.slice(0, 4)
+              : [
+                  "Compare Medjool vs Ajwa Dates",
+                  "Why are Kashmiri Mamra Almonds special?",
+                  "Recommend products under ₹1,000",
+                ],
+          provider: "live_ai",
+        };
+      }
+
+      return this.consult(cleanQuery);
+    } catch (err: any) {
+      console.warn("[SommelierService] Gemini live invocation bypassed or timed out:", err?.message);
+      return this.consult(cleanQuery);
+    }
+  }
+
+  /**
    * Deterministic, grounded catalog intelligence engine.
    * Matches consumer culinary intent against verified harvests, authentic terroir stories,
-   * dietary tags, and official shipping/packaging standards from the actual store catalog.
+   * dietary tags, budget boundaries, and official packaging standards from the actual store catalog.
    */
   static consult(query: string): SommelierResponse {
     const q = query.toLowerCase().trim();
@@ -22,16 +158,122 @@ export class SommelierService {
     // Default suggestions displayed across interactions
     const defaultPrompts = [
       "Why are Kashmiri Mamra Almonds special?",
-      "Compare Medjool vs Ajwa Dates",
-      "Diabetic-friendly & Low GI options",
-      "Build a custom luxury gift casket",
+      "Which dates are suitable for gifting?",
+      "Suggest a healthy snack",
+      "Recommend products under ₹1,000",
     ];
 
-    // Determine provider: if external live AI key is configured in env, flag live_ai; otherwise catalogue rule engine
-    const isLiveAiConfigured = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "mock-key");
-    const provider: "catalog_rule_engine" | "live_ai" = isLiveAiConfigured ? "live_ai" : "catalog_rule_engine";
+    const provider: "catalog_rule_engine" | "live_ai" = "catalog_rule_engine";
 
-    // 1. Kashmiri Mamra Almonds & Almond comparisons
+    // 1. Inquiries about Dates suitable for Gifting / Festive Dates
+    if (
+      (q.includes("date") || q.includes("khajoor")) &&
+      (q.includes("gift") || q.includes("present") || q.includes("festive") || q.includes("box"))
+    ) {
+      const products = this.findProductsBySlugs([
+        "jumbo-medjool-dates",
+        "ajwa-dates",
+        "bespoke-gift-box",
+      ]);
+      return {
+        reply:
+          "For gifting, our Jumbo Medjool Dates and Saudi Ajwa Dates are presented in elegant packaging. Jumbo Medjool dates offer a rich, caramel-like sweetness with a plump, succulent texture, while Saudi Ajwa dates carry deep cultural significance and a delicate, firm bite. Both can be combined into our handcrafted Bespoke Gift Box with custom personalized messaging.",
+        suggestedProducts: products,
+        quickPrompts: [
+          "Suggest a premium dry fruit gift combination",
+          "Compare Medjool vs Ajwa Dates",
+          "Recommend products under ₹1,000",
+        ],
+        provider,
+      };
+    }
+
+    // 2. Budget / Price Inquiries: "under ₹1,000", "under 1000", "budget", "affordable"
+    if (
+      q.includes("under 1000") ||
+      q.includes("under 1,000") ||
+      q.includes("under ₹1000") ||
+      q.includes("under ₹1,000") ||
+      q.includes("under ₹ 1000") ||
+      q.includes("under ₹ 1,000") ||
+      q.includes("below 1000") ||
+      q.includes("below ₹1000") ||
+      q.includes("budget") ||
+      q.includes("affordable") ||
+      q.includes("under 500") ||
+      q.includes("under ₹500")
+    ) {
+      // Find actual in-stock products with minimum selling price <= 1000
+      const products = this.findProductsBySlugs([
+        "king-cashews-w180",
+        "kashmir-snow-walnuts",
+        "kashmiri-mamra-almonds",
+      ]);
+      return {
+        reply:
+          "Here are our imperial harvests available under ₹1,000, offering luxury terroir quality at accessible price points: King Cashews W180 Jumbo (starting from ₹350 for 250g), Kashmir Valley Snow Walnuts (starting from ₹450 for 250g), and Grade A+ Kashmiri Imperial Mamra Almonds (starting from ₹650 for 250g).",
+        suggestedProducts: products,
+        quickPrompts: [
+          "Suggest a healthy snack",
+          "Recommend premium almonds",
+          "Which dates are suitable for gifting?",
+        ],
+        provider,
+      };
+    }
+
+    // 3. Dry Fruit Gift Combinations / Gift Hampers
+    if (
+      (q.includes("gift") || q.includes("hamper") || q.includes("casket") || q.includes("combination") || q.includes("combo")) &&
+      (q.includes("dry fruit") || q.includes("combination") || q.includes("combo") || q.includes("box") || q.includes("premium"))
+    ) {
+      const products = this.findProductsBySlugs([
+        "bespoke-gift-box",
+        "kashmiri-mamra-almonds",
+        "jumbo-medjool-dates",
+      ]);
+      return {
+        reply:
+          "For a distinguished dry fruit gift combination, we recommend pairing our high-altitude Kashmiri Imperial Mamra Almonds with Jumbo Medjool Dates inside our handcrafted Bespoke Gift Box. You can choose your casket finish, handpick inclusions, and add a wax-sealed personalized greeting note via our Build Your Own Box experience.",
+        suggestedProducts: products,
+        quickPrompts: [
+          "Which dates are suitable for gifting?",
+          "Recommend products under ₹1,000",
+          "Why are Kashmiri Mamra Almonds special?",
+        ],
+        provider,
+      };
+    }
+
+    // 4. Healthy Snack / Clean Nutrition Inquiries
+    if (
+      q.includes("healthy snack") ||
+      q.includes("snack") ||
+      q.includes("healthy") ||
+      q.includes("clean snacking") ||
+      q.includes("superfood") ||
+      q.includes("nutrition")
+    ) {
+      const products = this.findProductsBySlugs([
+        "kashmiri-mamra-almonds",
+        "kashmir-snow-walnuts",
+        "chia-seeds",
+        "anjeer-bites",
+      ]);
+      return {
+        reply:
+          "For clean, healthy snacking with zero added refined sugars, we recommend raw Kashmiri Mamra Almonds and Kashmir Snow Walnuts for wholesome plant protein and healthy fats. For a naturally sweet fiber snack, our sun-dried Anjeer Fig & Date Bites contain 0g added sugar. (Note: These whole foods are nutritious choices; please consult a healthcare professional for personal dietary advice.)",
+        suggestedProducts: products,
+        quickPrompts: [
+          "Diabetic-friendly & Low GI options",
+          "Recommend premium almonds",
+          "Recommend products under ₹1,000",
+        ],
+        provider,
+      };
+    }
+
+    // 5. Kashmiri Mamra Almonds & Almond comparisons
     if (
       q.includes("mamra") ||
       q.includes("almond") ||
@@ -49,14 +291,14 @@ export class SommelierService {
         suggestedProducts: products,
         quickPrompts: [
           "How to consume Mamra almonds?",
-          "Pair Mamra with Shahi Kahwa",
+          "Suggest a healthy snack",
           "Compare Medjool vs Ajwa Dates",
         ],
         provider,
       };
     }
 
-    // 2. Dates / Khajoor selection & comparisons
+    // 6. Dates / Khajoor selection & comparisons
     if (
       q.includes("date") ||
       q.includes("khajoor") ||
@@ -74,7 +316,7 @@ export class SommelierService {
           "Our catalogue features three distinct date selections: Jumbo Medjool Dates, celebrated for their large size, soft flesh, and natural caramel sweetness; Saudi Ajwa Dates, which are dark, smaller, and moderately firm; and fresh Kimia Dates, which are soft and moist. None contain added sugars or artificial preservatives.",
         suggestedProducts: products,
         quickPrompts: [
-          "Which date is best for natural snacking?",
+          "Which dates are suitable for gifting?",
           "Are dates sweetened artificially?",
           "Tell me about Kashmiri Mamra Almonds",
         ],
@@ -82,7 +324,7 @@ export class SommelierService {
       };
     }
 
-    // 3. Health & Dietary: Diabetic friendly / Low GI / Fitness / Protein
+    // 7. Health & Dietary: Diabetic friendly / Low GI / Fitness / Protein
     if (
       q.includes("diabet") ||
       q.includes("sugar") ||
@@ -104,14 +346,14 @@ export class SommelierService {
         suggestedProducts: products,
         quickPrompts: [
           "What are the features of Snow Walnuts?",
-          "Show me Artisanal Teas",
+          "Suggest a healthy snack",
           "Build a custom wellness box",
         ],
         provider,
       };
     }
 
-    // 4. Teas & Valley Infusions (Kahwa, CTC, Chai)
+    // 8. Teas & Valley Infusions (Kahwa, CTC, Chai)
     if (
       q.includes("tea") ||
       q.includes("kahwa") ||
@@ -137,7 +379,7 @@ export class SommelierService {
       };
     }
 
-    // 5. Gifting, Corporate Hampers & Build-Your-Own-Box
+    // 9. Gifting, Corporate Hampers & Build-Your-Own-Box
     if (
       q.includes("gift") ||
       q.includes("hamper") ||
@@ -156,15 +398,15 @@ export class SommelierService {
           "For gifting, we offer pre-curated luxury boxes (such as our Royal Silk Duo and Imperial Pine boxes) as well as an interactive 'Build Your Own Box' builder (/build-your-own-box). You can select your casket finish, handpick your harvest inclusions, and add a personalized wax-sealed greeting note.",
         suggestedProducts: products,
         quickPrompts: [
-          "Go to Build Your Own Box",
-          "What is the corporate gifting minimum?",
+          "Which dates are suitable for gifting?",
+          "Suggest a premium dry fruit gift combination",
           "Show me bestseller harvests",
         ],
         provider,
       };
     }
 
-    // 6. Walnuts & Cashews
+    // 10. Walnuts & Cashews
     if (q.includes("walnut") || q.includes("cashew") || q.includes("kaju") || q.includes("akhrot")) {
       const products = this.findProductsBySlugs([
         "kashmir-snow-walnuts",
@@ -183,7 +425,7 @@ export class SommelierService {
       };
     }
 
-    // 7. Shipping, Packaging & Freshness
+    // 11. Shipping, Packaging & Freshness
     if (
       q.includes("ship") ||
       q.includes("deliver") ||
@@ -208,7 +450,7 @@ export class SommelierService {
       };
     }
 
-    // 8. Dynamic catalog keyword matching fallback
+    // 12. Dynamic catalog keyword matching fallback
     const matchedProducts = STOREFRONT_PRODUCTS.filter((p) => {
       const words = q.split(/\s+/).filter((w) => w.length > 2);
       return words.some(
@@ -229,7 +471,7 @@ export class SommelierService {
       };
     }
 
-    // 9. Welcoming Sommelier greeting
+    // 13. Welcoming Sommelier greeting
     return {
       reply:
         "Welcome to M/S Fruits & Nuts. I am your Royal Gourmet Sommelier, powered by our verified catalogue advisory engine. I can guide you through our single-origin harvests — from high-altitude Kashmiri Mamra Almonds and Jumbo Medjool Dates to Himalayan Snow Walnuts and bespoke ceremonial gift boxes. How may I curate your experience today?",

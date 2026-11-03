@@ -89,6 +89,74 @@ async function runSommelierTests() {
   assert.ok(Array.isArray(randomAnswer.quickPrompts));
   console.log("  ✓ Safe fallback handling verified without errors.");
 
+  // Test 8: Which dates are suitable for gifting?
+  console.log("▶️ Test 8: Which dates are suitable for gifting?...");
+  const giftingDatesAnswer = SommelierService.consult("Which dates are suitable for gifting?");
+  assert.ok(
+    giftingDatesAnswer.reply.toLowerCase().includes("medjool") ||
+      giftingDatesAnswer.reply.toLowerCase().includes("ajwa"),
+    "Must recommend Medjool or Ajwa for gifting"
+  );
+  assert.ok(
+    giftingDatesAnswer.suggestedProducts.some((p) => p.slug === "jumbo-medjool-dates" || p.slug === "ajwa-dates"),
+    "Must include authentic date products"
+  );
+  console.log("  ✓ Gifting dates recommendation verified.");
+
+  // Test 9: Suggest a healthy snack
+  console.log("▶️ Test 9: Suggest a healthy snack...");
+  const healthySnackAnswer = SommelierService.consult("Suggest a healthy snack");
+  assert.ok(
+    healthySnackAnswer.reply.toLowerCase().includes("healthy") ||
+      healthySnackAnswer.reply.toLowerCase().includes("snack") ||
+      healthySnackAnswer.reply.toLowerCase().includes("protein"),
+    "Must provide grounded healthy snacking context"
+  );
+  assert.ok(
+    healthySnackAnswer.suggestedProducts.length >= 2,
+    "Must suggest healthy snack products"
+  );
+  console.log("  ✓ Healthy snack recommendations verified.");
+
+  // Test 10: Recommend products under ₹1,000
+  console.log("▶️ Test 10: Recommend products under ₹1,000...");
+  const budgetAnswer = SommelierService.consult("Recommend products under ₹1,000");
+  assert.ok(
+    budgetAnswer.reply.includes("1,000") || budgetAnswer.reply.includes("1000"),
+    "Must reference the ₹1,000 budget constraint"
+  );
+  assert.ok(
+    budgetAnswer.suggestedProducts.every((p) => (p.priceRange?.minSellingPrice ?? 0) <= 1000),
+    "All recommended products must have a variant under ₹1,000"
+  );
+  console.log("  ✓ Under ₹1,000 budget recommendations verified.");
+
+  // Test 11: Suggest a premium dry fruit gift combination
+  console.log("▶️ Test 11: Suggest a premium dry fruit gift combination...");
+  const comboAnswer = SommelierService.consult("Suggest a premium dry fruit gift combination");
+  assert.ok(
+    comboAnswer.reply.toLowerCase().includes("gift") ||
+      comboAnswer.reply.toLowerCase().includes("bespoke") ||
+      comboAnswer.reply.toLowerCase().includes("box"),
+    "Must recommend bespoke gift box combination"
+  );
+  assert.ok(
+    comboAnswer.suggestedProducts.some((p) => p.slug === "bespoke-gift-box"),
+    "Must include Bespoke Gift Box in combination"
+  );
+  console.log("  ✓ Premium dry fruit gift combination verified.");
+
+  // Test 12: consultAsync with fallback resilience
+  console.log("▶️ Test 12: consultAsync async execution with fallback resilience...");
+  const asyncResult = await SommelierService.consultAsync("Recommend premium almonds");
+  assert.ok(typeof asyncResult.reply === "string" && asyncResult.reply.length > 0);
+  assert.ok(asyncResult.suggestedProducts.some((p) => p.slug === "kashmiri-mamra-almonds"));
+  assert.ok(
+    asyncResult.provider === "catalog_rule_engine" || asyncResult.provider === "live_ai",
+    "Must provide a valid provider tag"
+  );
+  console.log("  ✓ consultAsync executed with provider resilience verified.");
+
   console.log("\n✅ ALL SOMMELIER AI ASSISTANT TESTS PASSED!\n");
 }
 
