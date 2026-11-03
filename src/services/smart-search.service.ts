@@ -162,13 +162,23 @@ export class SmartSearchService {
    */
   static search(
     query: string,
-    options?: { limit?: number; categorySlug?: string; needTag?: NeedTag }
+    options?: { limit?: number; categorySlug?: string; needTag?: NeedTag; extraProducts?: any[] }
   ): SmartSearchResult {
     const raw = query.toLowerCase().trim();
-    if (!raw) {
-      const all = options?.categorySlug
-        ? STOREFRONT_PRODUCTS.filter((p) => p.category?.slug === options.categorySlug)
+    const pool =
+      options?.extraProducts && options.extraProducts.length > 0
+        ? [
+            ...options.extraProducts,
+            ...STOREFRONT_PRODUCTS.filter(
+              (sp) => !options.extraProducts!.some((ep: any) => ep.slug === sp.slug)
+            ),
+          ]
         : STOREFRONT_PRODUCTS;
+
+    if (!raw) {
+      const all = options?.categorySlug && options.categorySlug !== "all"
+        ? pool.filter((p: any) => p.category?.slug === options.categorySlug || p.collectionGroup === options.categorySlug)
+        : pool;
       return {
         products: all.slice(0, options?.limit || 12),
         totalMatches: all.length,
@@ -194,7 +204,7 @@ export class SmartSearchService {
     // 2. Score each product
     const scoredProducts: Array<{ product: StorefrontCatalogProduct; score: number }> = [];
 
-    for (const p of STOREFRONT_PRODUCTS) {
+    for (const p of pool) {
       // Optional category constraint
       if (options?.categorySlug && options.categorySlug !== "all") {
         if (p.category?.slug !== options.categorySlug && p.collectionGroup !== options.categorySlug) {
@@ -209,13 +219,13 @@ export class SmartSearchService {
       const pTagLower = p.tag?.toLowerCase() || "";
       const pTerroirLower = p.terroir?.toLowerCase() || "";
       const pTokensSet = new Set<string>();
-      pNameLower.split(/[\s,+/()_-]+/).forEach((t) => {
+      pNameLower.split(/[\s,+/()_-]+/).forEach((t: string) => {
         if (t.length > 1) {
           pTokensSet.add(t);
           if (t.endsWith("s") && t.length > 3) pTokensSet.add(t.slice(0, -1));
         }
       });
-      pSlugLower.split("-").forEach((t) => {
+      pSlugLower.split("-").forEach((t: string) => {
         if (t.length > 1) {
           pTokensSet.add(t);
           if (t.endsWith("s") && t.length > 3) pTokensSet.add(t.slice(0, -1));

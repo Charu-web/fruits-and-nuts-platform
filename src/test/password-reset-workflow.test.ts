@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import { AuthService } from "../services/auth.service";
 import { NotificationService } from "../services/notification.service";
@@ -10,6 +10,13 @@ console.log("🧪 Running Comprehensive Password Reset & Recovery Workflow Test 
 describe("Password Reset & Account Recovery Security & Workflow Tests", () => {
   const originalEmailProvider = process.env.EMAIL_PROVIDER;
   process.env.EMAIL_PROVIDER = "MOCK";
+
+  before(() => {
+    const user = AuthService.getDevUsersForTesting().find((u) => u.email === "aarav.sharma@gmail.com");
+    if (user) {
+      user.passwordHash = "$2b$10$ureVvETTs5AW1cBdf0NgXu7H7TN4SJk0TUCdoAc.4KXP5aCTSj0qm";
+    }
+  });
   // Test 1: Forgot Password Input Validation
   it("Test 1: Forgot Password Input Validation (Email, Phone, Malformed Inputs)", () => {
     // 1a: Valid email

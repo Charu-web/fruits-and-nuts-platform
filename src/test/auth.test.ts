@@ -196,6 +196,8 @@ async function runAuthTests() {
   console.assert(oldPwMatches === false, "Old password must no longer match hash");
   const newPwMatches = await verifyPassword("NewPassword2026!@#", devUser!.passwordHash);
   console.assert(newPwMatches === true, "New password must match updated hash");
+  // Restore Aarav's password so subsequent test suites start with clean state
+  devUser!.passwordHash = "$2b$10$ureVvETTs5AW1cBdf0NgXu7H7TN4SJk0TUCdoAc.4KXP5aCTSj0qm";
   console.log("✅ Test 9 Passed: Token single-use invalidation, bcrypt update, and old password revocation.");
 
   console.log("🎉 All Phase 9B Authentication & RBAC Tests passed successfully!");

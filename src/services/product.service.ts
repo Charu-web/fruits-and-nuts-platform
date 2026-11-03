@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { runTransaction } from "@/database/transactions";
@@ -198,8 +199,28 @@ export class ProductService {
       },
     };
 
-    if (category) {
-      where.category = { slug: category, isActive: true };
+    if (category && category !== "all") {
+      const categoryAliases: Record<string, string[]> = {
+        dates: ["dates-khajoor", "dates"],
+        "dates-khajoor": ["dates-khajoor", "dates"],
+        seeds: ["seeds", "super-seeds"],
+        "super-seeds": ["seeds", "super-seeds"],
+        tea: ["tea", "artisan-tea"],
+        "artisan-tea": ["tea", "artisan-tea"],
+        chocolates: ["chocolates", "gourmet-chocolates"],
+        "gourmet-chocolates": ["chocolates", "gourmet-chocolates"],
+        gifting: ["gifting", "luxury-gifting"],
+        "luxury-gifting": ["gifting", "luxury-gifting"],
+        combos: ["combos", "value-combos"],
+        "value-combos": ["combos", "value-combos"],
+        "mouth-fresheners": ["mouth-fresheners"],
+        "dry-fruits": ["dry-fruits", "fruits-and-nuts"],
+        "fruits-and-nuts": ["fruits-and-nuts", "dry-fruits"],
+        specialty: ["specialty", "specialty-products"],
+      };
+      const cleanCat = category.toLowerCase().trim();
+      const slugs = categoryAliases[cleanCat] || [cleanCat];
+      where.category = { slug: { in: slugs }, isActive: true };
     }
 
     if (subcategory) {
@@ -222,13 +243,13 @@ export class ProductService {
       where.isByobEligible = isByobEligible;
     }
 
-    let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
+    let orderBy: Prisma.ProductOrderByWithRelationInput | Prisma.ProductOrderByWithRelationInput[] = { createdAt: "desc" };
     if (sort === "newest") {
       orderBy = { createdAt: "desc" };
     } else if (sort === "name_asc") {
       orderBy = { name: "asc" };
     } else if (sort === "featured") {
-      orderBy = { isFeatured: "desc" };
+      orderBy = [{ isFeatured: "desc" }, { createdAt: "desc" }];
     }
 
     let total = 0;
@@ -302,15 +323,23 @@ export class ProductService {
         isByobEligible: p.isByobEligible,
         category: p.category,
         subcategory: p.subcategory,
-        primaryImage: getProductImageUrl(p.slug)
+        primaryImage: p.images[0]
           ? {
-              id: p.images[0]?.id ?? `asset-${p.slug}`,
-              imageUrl: getProductImageUrl(p.slug)!,
-              altText: p.images[0]?.altText || p.name,
+              id: p.images[0].id,
+              imageUrl: p.images[0].imageUrl,
+              altText: p.images[0].altText || p.name,
               isPrimary: true,
               sortOrder: 0,
             }
-          : p.images[0] ?? null,
+          : getProductImageUrl(p.slug)
+          ? {
+              id: `asset-${p.slug}`,
+              imageUrl: getProductImageUrl(p.slug)!,
+              altText: p.name,
+              isPrimary: true,
+              sortOrder: 0,
+            }
+          : null,
         priceRange: {
           minSellingPrice,
           maxSellingPrice,
@@ -398,8 +427,11 @@ export class ProductService {
    * Public Product Detail: Retrieves full PDP payload by product slug.
    */
   static async getProductBySlug(slug: string) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug);
     const product = await db.product.findFirst({
-      where: { slug, isActive: true },
+      where: isUuid
+        ? { OR: [{ slug }, { id: slug }], isActive: true }
+        : { slug, isActive: true },
       include: {
         category: { select: { id: true, name: true, slug: true } },
         subcategory: { select: { id: true, name: true, slug: true } },
@@ -460,20 +492,20 @@ export class ProductService {
       metaDescription: product.metaDescription,
       category: product.category,
       subcategory: product.subcategory,
-      images: getProductImageUrl(product.slug)
+      images: product.images.length > 0
+        ? product.images
+        : getProductImageUrl(product.slug)
         ? [
             {
-              id: product.images[0]?.id ?? `asset-${product.slug}`,
+              id: `asset-${product.slug}`,
               imageUrl: getProductImageUrl(product.slug)!,
-              altText: product.images[0]?.altText || product.name,
+              altText: product.name,
               isPrimary: true,
               sortOrder: 0,
               productId: product.id,
               createdAt: product.createdAt,
             },
           ]
-        : product.images.length > 0
-        ? product.images
         : [],
       variants: formattedVariants,
       createdAt: product.createdAt,
@@ -688,13 +720,15 @@ export class ProductService {
 
     const categoryMap: Record<number, { id: number; name: string; slug: string }> = {
       1: { id: 1, name: "Fruits & Nuts", slug: "fruits-and-nuts" },
-      2: { id: 2, name: "Dry Fruits & Nuts", slug: "dry-fruits" },
+      2: { id: 2, name: "Dry Fruits", slug: "dry-fruits" },
       3: { id: 3, name: "Dates / Khajoor", slug: "dates-khajoor" },
-      4: { id: 4, name: "Super Seeds & Berries", slug: "seeds" },
-      5: { id: 5, name: "Artisanal Teas", slug: "tea" },
-      6: { id: 6, name: "Gourmet Bites & Confections", slug: "chocolates" },
-      7: { id: 7, name: "Pantry & Vedic Ghee", slug: "pantry" },
-      8: { id: 8, name: "Luxury Gifting", slug: "gifting" },
+      4: { id: 4, name: "Super Seeds", slug: "seeds" },
+      5: { id: 5, name: "Artisan Tea", slug: "tea" },
+      6: { id: 6, name: "Gourmet Chocolates", slug: "chocolates" },
+      7: { id: 7, name: "Royal Mouth Fresheners", slug: "mouth-fresheners" },
+      8: { id: 8, name: "Value Combos", slug: "combos" },
+      9: { id: 9, name: "Luxury Gifting", slug: "gifting" },
+      10: { id: 10, name: "Specialty Products", slug: "specialty" },
     };
 
     const targetCategory = categoryMap[validated.categoryId] || {
@@ -766,14 +800,14 @@ export class ProductService {
     }
     saveDevProductsToDisk();
 
-    // Also attempt DB transaction if DB is online
+    // Persist to Neon PostgreSQL
     try {
       await runTransaction(async (tx) => {
         const product = await tx.product.create({
           data: {
             id: productId,
             categoryId: validated.categoryId,
-            subcategoryId: validated.subcategoryId,
+            subcategoryId: validated.subcategoryId || null,
             name: validated.name,
             slug: validated.slug,
             skuBase: validated.skuBase,
@@ -784,10 +818,10 @@ export class ProductService {
             shelfLifeMonths: validated.shelfLifeMonths,
             hsnCode: validated.hsnCode,
             gstPercentage: new Prisma.Decimal(validated.gstPercentage),
-            isActive: validated.isActive,
-            isFeatured: validated.isFeatured,
-            isByobEligible: validated.isByobEligible,
-            healthContentStatus: validated.healthContentStatus,
+            isActive: validated.isActive !== false,
+            isFeatured: Boolean(validated.isFeatured),
+            isByobEligible: Boolean(validated.isByobEligible),
+            healthContentStatus: validated.healthContentStatus || "APPROVED",
             metaTitle: validated.metaTitle,
             metaDescription: validated.metaDescription,
           },
@@ -795,9 +829,10 @@ export class ProductService {
 
         if (validated.variants && validated.variants.length > 0) {
           for (const v of validated.variants) {
+            const variantId = toDeterministicUuid(v.sku);
             const variant = await tx.productVariant.create({
               data: {
-                id: toDeterministicUuid(v.sku),
+                id: variantId,
                 productId: product.id,
                 sku: v.sku,
                 weightGrams: new Prisma.Decimal(v.weightGrams),
@@ -807,16 +842,16 @@ export class ProductService {
                 sellingPrice: new Prisma.Decimal(v.sellingPrice),
                 wholesalePrice: v.wholesalePrice ? new Prisma.Decimal(v.wholesalePrice) : null,
                 wholesaleMinQty: v.wholesaleMinQty,
-                isActive: v.isActive,
+                isActive: v.isActive !== false,
               },
             });
 
             await tx.inventory.create({
               data: {
                 variantId: variant.id,
-                stockAvailable: v.initialStock,
+                stockAvailable: v.initialStock || 50,
                 stockReserved: 0,
-                safetyBufferThreshold: v.safetyBufferThreshold,
+                safetyBufferThreshold: v.safetyBufferThreshold || 10,
               },
             });
           }
@@ -824,18 +859,33 @@ export class ProductService {
 
         if (validated.images && validated.images.length > 0) {
           await tx.productImage.createMany({
-            data: validated.images.map((img) => ({
+            data: validated.images.map((img, idx) => ({
               productId: product.id,
-              storageKey: img.storageKey,
+              storageKey: img.storageKey || `products/${product.slug}/${idx}.jpg`,
               imageUrl: img.imageUrl,
-              altText: img.altText,
-              sortOrder: img.sortOrder,
-              isPrimary: img.isPrimary,
+              altText: img.altText || product.name,
+              sortOrder: img.sortOrder ?? idx,
+              isPrimary: img.isPrimary ?? (idx === 0),
             })),
           });
         }
       });
-    } catch {}
+
+      try {
+        revalidatePath("/shop");
+        revalidatePath("/");
+        revalidatePath(`/product/${validated.slug}`);
+        if (targetCategory?.slug) {
+          revalidatePath(`/category/${targetCategory.slug}`);
+        }
+      } catch {}
+    } catch (dbErr: any) {
+      console.error("[ProductService] DB error in createProduct:", dbErr?.message);
+      if (dbErr instanceof AppError) {
+        throw dbErr;
+      }
+      throw AppError.database(`Failed to save product in database: ${dbErr?.message || "Unknown error"}`);
+    }
 
     return newDevProduct;
   }
@@ -858,15 +908,38 @@ export class ProductService {
     }
 
     try {
-      await db.product.update({
-        where: { id },
-        data: {
-          ...validated,
-          gstPercentage: validated.gstPercentage ? new Prisma.Decimal(validated.gstPercentage) : undefined,
-          nutritionFacts: validated.nutritionFacts ? (validated.nutritionFacts as Prisma.InputJsonValue) : undefined,
-        },
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+      const existing = await db.product.findFirst({
+        where: isUuid ? { OR: [{ id }, { slug: id }] } : { slug: id },
+        select: { id: true, slug: true, category: { select: { slug: true } } },
       });
-    } catch {}
+
+      if (existing) {
+        await db.product.update({
+          where: { id: existing.id },
+          data: {
+            ...validated,
+            gstPercentage: validated.gstPercentage !== undefined ? new Prisma.Decimal(validated.gstPercentage) : undefined,
+            nutritionFacts: validated.nutritionFacts ? (validated.nutritionFacts as Prisma.InputJsonValue) : undefined,
+          },
+        });
+
+        try {
+          revalidatePath("/shop");
+          revalidatePath("/");
+          revalidatePath(`/product/${validated.slug || existing.slug}`);
+          if (existing.category?.slug) {
+            revalidatePath(`/category/${existing.category.slug}`);
+          }
+        } catch {}
+      }
+    } catch (dbErr: any) {
+      console.error("[ProductService] DB error in updateProduct:", dbErr?.message);
+      if (dbErr instanceof AppError) {
+        throw dbErr;
+      }
+      throw AppError.database(`Failed to update product in database: ${dbErr?.message || "Unknown error"}`);
+    }
 
     return idx >= 0 ? DEV_PRODUCTS[idx] : { id, ...validated };
   }
@@ -883,11 +956,34 @@ export class ProductService {
     }
 
     try {
-      await db.product.update({
-        where: { id },
-        data: { isActive: false },
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+      const existing = await db.product.findFirst({
+        where: isUuid ? { OR: [{ id }, { slug: id }] } : { slug: id },
+        select: { id: true, slug: true, category: { select: { slug: true } } },
       });
-    } catch {}
+
+      if (existing) {
+        await db.product.update({
+          where: { id: existing.id },
+          data: { isActive: false },
+        });
+
+        try {
+          revalidatePath("/shop");
+          revalidatePath("/");
+          revalidatePath(`/product/${existing.slug}`);
+          if (existing.category?.slug) {
+            revalidatePath(`/category/${existing.category.slug}`);
+          }
+        } catch {}
+      }
+    } catch (dbErr: any) {
+      console.error("[ProductService] DB error in deleteProduct:", dbErr?.message);
+      if (dbErr instanceof AppError) {
+        throw dbErr;
+      }
+      throw AppError.database(`Failed to deactivate product in database: ${dbErr?.message || "Unknown error"}`);
+    }
 
     return { success: true, message: "Product deactivated successfully." };
   }

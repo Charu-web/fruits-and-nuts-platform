@@ -150,6 +150,7 @@ export default function HomePage() {
   const [featuredProducts, setFeaturedProducts] = useState<ProductCardProps[]>(
     STOREFRONT_PRODUCTS.filter((p) => p.isBestseller)
   );
+  const [allProducts, setAllProducts] = useState<ProductCardProps[]>(STOREFRONT_PRODUCTS);
   const [activeCollectionTab, setActiveCollectionTab] = useState<
     "bestsellers" | "dry-fruits" | "dates" | "tea" | "chocolates" | "seeds"
   >("bestsellers");
@@ -168,15 +169,25 @@ export default function HomePage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const prodRes = await fetchWithTimeout(
-          "/api/v1/products?isFeatured=true&limit=8",
-          undefined,
-          2500
-        ).catch(() => null);
+        const prodRes = await fetch("/api/v1/products?limit=50&sort=featured", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        }).catch(() => null);
+
         if (prodRes && prodRes.ok) {
           const prodData = await prodRes.json();
-          if (prodData.success && prodData.data?.items?.length > 0) {
-            setFeaturedProducts(prodData.data.items);
+          const items: ProductCardProps[] = Array.isArray(prodData.data)
+            ? prodData.data
+            : prodData.data?.items || [];
+
+          if (prodData.success && items.length > 0) {
+            setAllProducts(items);
+            const featured = items.filter((p: any) => p.isFeatured || p.isBestseller);
+            if (featured.length > 0) {
+              setFeaturedProducts(featured.slice(0, 12));
+            } else {
+              setFeaturedProducts(items.slice(0, 12));
+            }
           }
         }
       } catch {
@@ -189,7 +200,25 @@ export default function HomePage() {
   const tabProducts =
     activeCollectionTab === "bestsellers"
       ? featuredProducts
-      : STOREFRONT_PRODUCTS.filter((p) => p.collectionGroup === activeCollectionTab);
+      : allProducts.filter((p: any) => {
+          const catSlug = (p.category?.slug || p.collectionGroup || "").toLowerCase();
+          if (activeCollectionTab === "dry-fruits") {
+            return catSlug === "dry-fruits" || catSlug === "fruits-and-nuts";
+          }
+          if (activeCollectionTab === "dates") {
+            return catSlug === "dates-khajoor" || catSlug === "dates";
+          }
+          if (activeCollectionTab === "tea") {
+            return catSlug === "tea" || catSlug === "artisan-tea";
+          }
+          if (activeCollectionTab === "chocolates") {
+            return catSlug === "chocolates" || catSlug === "gourmet-chocolates";
+          }
+          if (activeCollectionTab === "seeds") {
+            return catSlug === "seeds" || catSlug === "super-seeds";
+          }
+          return catSlug === activeCollectionTab;
+        });
 
   const handleNewsletter = (e: React.FormEvent) => {
     e.preventDefault();

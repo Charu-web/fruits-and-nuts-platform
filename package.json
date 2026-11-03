@@ -33,7 +33,7 @@
     "test:store-admin": "tsx src/test/store-admin.test.ts",
     "test:db": "tsx src/test/database.test.ts",
     "test:all": "tsx src/test/run-all.ts",
-    "test": "node --import tsx --test src/test/*.test.ts"
+    "test": "node --import tsx --test --test-concurrency=1 src/test/*.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",

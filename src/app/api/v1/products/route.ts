@@ -3,6 +3,9 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { getRequestId } from "@/lib/request-context";
 import { ProductService } from "@/services/product.service";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
   const requestId = await getRequestId();
   try {
@@ -23,12 +26,14 @@ export async function GET(req: NextRequest) {
     };
 
     const result = await ProductService.listPublicProducts(query as any);
-    return apiSuccess(result.items, 200, {
+    const response = apiSuccess(result.items, 200, {
       page: result.pagination.page,
       limit: result.pagination.limit,
       total: result.pagination.total,
       requestId,
     });
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    return response;
   } catch (error) {
     return apiError(error, requestId);
   }

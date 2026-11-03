@@ -119,11 +119,15 @@ function ProductListingViewInner({
       params.set("page", String(currentPage));
       params.set("limit", "12");
 
-      const res = await fetchWithTimeout(`/api/v1/products?${params.toString()}`, undefined, 2000).catch(() => null);
+      const res = await fetch(`/api/v1/products?${params.toString()}`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      }).catch(() => null);
+
       if (res && res.ok) {
         const json = await res.json();
-        const rawItems = Array.isArray(json.data) ? json.data : (json.data?.items || []);
-        if (json.success && rawItems && rawItems.length > 0) {
+        if (json.success) {
+          const rawItems = Array.isArray(json.data) ? json.data : (json.data?.items || []);
           let items: ProductCardProps[] = rawItems.map((item: ProductCardProps) => {
             if (!item.primaryImage?.imageUrl) {
               const sfMatch = STOREFRONT_PRODUCTS.find(
@@ -142,22 +146,38 @@ function ProductListingViewInner({
             items = items.filter((p) => matchingSlugs.has(p.slug) || p.needTags?.includes(selectedNeed as any));
           }
           setProducts(items);
-          const total = json.meta?.total || items.length;
+          const total = json.meta?.total !== undefined ? json.meta.total : items.length;
           setTotalPages(Math.max(1, Math.ceil(total / 12)));
           setTotalCount(total);
           return;
         }
       }
 
-      // Fallback in-memory catalog
+      // Fallback in-memory catalog (used only if server API is offline)
       let filtered = [...STOREFRONT_PRODUCTS];
       if (selectedCategory && selectedCategory !== "all") {
+        const catAliases: Record<string, string[]> = {
+          dates: ["dates-khajoor", "dates"],
+          "dates-khajoor": ["dates-khajoor", "dates"],
+          seeds: ["seeds", "super-seeds"],
+          "super-seeds": ["seeds", "super-seeds"],
+          tea: ["tea", "artisan-tea"],
+          "artisan-tea": ["tea", "artisan-tea"],
+          chocolates: ["chocolates", "gourmet-chocolates"],
+          "gourmet-chocolates": ["chocolates", "gourmet-chocolates"],
+          gifting: ["gifting", "luxury-gifting"],
+          "luxury-gifting": ["gifting", "luxury-gifting"],
+          combos: ["combos", "value-combos"],
+          "value-combos": ["combos", "value-combos"],
+          "mouth-fresheners": ["mouth-fresheners"],
+          "dry-fruits": ["dry-fruits", "fruits-and-nuts"],
+          "fruits-and-nuts": ["fruits-and-nuts", "dry-fruits"],
+        };
+        const slugs = catAliases[selectedCategory.toLowerCase().trim()] || [selectedCategory.toLowerCase().trim()];
         filtered = filtered.filter(
           (p) =>
-            p.category?.slug === selectedCategory ||
-            p.collectionGroup === selectedCategory ||
-            (selectedCategory === "dry-fruits" &&
-              (p.category?.slug === "dry-fruits" || p.category?.slug === "fruits-and-nuts"))
+            slugs.includes(p.category?.slug?.toLowerCase() || "") ||
+            slugs.includes(p.collectionGroup?.toLowerCase() || "")
         );
       }
       if (selectedNeed) {
