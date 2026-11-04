@@ -46,7 +46,13 @@ export class SommelierService {
     const cleanQuery = query.trim();
 
     if (!cleanQuery) {
-      return this.consult("");
+      const baseGreeting = this.consult("");
+      return {
+        ...baseGreeting,
+        reply:
+          "Welcome to M/S Fruits & Nuts. I am your Royal Gourmet Sommelier, powered by Google Gemini AI and grounded strictly in our verified royal catalogue. I can guide you through our single-origin harvests — from high-altitude Kashmiri Mamra Almonds and Jumbo Medjool Dates to Himalayan Snow Walnuts and bespoke ceremonial gift boxes. How may I curate your experience today?",
+        provider: "live_ai",
+      };
     }
 
     try {

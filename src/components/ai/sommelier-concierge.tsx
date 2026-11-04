@@ -57,9 +57,50 @@ export function SommelierConcierge() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleOpen = () => setIsOpen(true);
+    let isMounted = true;
+    async function syncProviderGreeting() {
+      try {
+        const res = await fetch("/api/v1/ai/sommelier", { method: "GET" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (isMounted && json.success && json.data) {
+          if (json.data.provider) {
+            setActiveProvider(json.data.provider);
+          }
+          if (json.data.reply) {
+            setMessages((prev) => {
+              if (prev.length === 1 && prev[0].id.startsWith("msg-welcome")) {
+                return [
+                  {
+                    ...prev[0],
+                    text: json.data.reply,
+                    suggestedProducts: json.data.suggestedProducts || prev[0].suggestedProducts,
+                  },
+                ];
+              }
+              return prev;
+            });
+          }
+          if (json.data.quickPrompts && json.data.quickPrompts.length > 0) {
+            setQuickPrompts(json.data.quickPrompts);
+          }
+        }
+      } catch {
+        // Keeps catalog_rule_engine on network failure
+      }
+    }
+
+    syncProviderGreeting();
+
+    const handleOpen = () => {
+      setIsOpen(true);
+      syncProviderGreeting();
+    };
     window.addEventListener("open-sommelier", handleOpen);
-    return () => window.removeEventListener("open-sommelier", handleOpen);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("open-sommelier", handleOpen);
+    };
   }, []);
 
   useEffect(() => {
@@ -149,6 +190,7 @@ export function SommelierConcierge() {
       }
     } catch (err) {
       console.error("Sommelier consultation failed", err);
+      setActiveProvider("catalog_rule_engine");
       const fallbackMsg: ChatMessage = {
         id: `sommelier-err-${Date.now()}`,
         sender: "sommelier",
@@ -186,10 +228,30 @@ export function SommelierConcierge() {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     setIsTyping(false);
     setInput("");
     setCartError(null);
+    try {
+      const res = await fetch("/api/v1/ai/sommelier", { method: "GET" });
+      const json = await res.json();
+      if (json.success && json.data) {
+        if (json.data.provider) setActiveProvider(json.data.provider);
+        setMessages([
+          {
+            id: `msg-${Date.now()}`,
+            sender: "sommelier",
+            text: json.data.reply,
+            suggestedProducts: json.data.suggestedProducts,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+        if (json.data.quickPrompts) setQuickPrompts(json.data.quickPrompts);
+        return;
+      }
+    } catch {
+      // fallback
+    }
     const welcome = SommelierService.consult("");
     setActiveProvider(welcome.provider);
     setMessages([
@@ -224,12 +286,12 @@ export function SommelierConcierge() {
                 <h4 className="font-serif font-bold text-sm text-[#FAF7F0] flex items-center gap-1.5">
                   <span>Royal Gourmet Sommelier</span>
                   <span className="px-1.5 py-0.2 bg-[#B89453]/30 text-[#E5DEC9] text-[9px] font-sans font-semibold rounded uppercase tracking-wider">
-                    {activeProvider === "live_ai" ? "Live AI Concierge" : "Catalogue Advisory"}
+                    {activeProvider === "live_ai" ? "LIVE AI CONCIERGE" : "CATALOGUE ADVISORY"}
                   </span>
                 </h4>
                 <p className="text-[10px] text-[#DDD2BF]">
                   {activeProvider === "live_ai"
-                    ? "Connected to Live AI Model"
+                    ? "Powered by Google Gemini AI · Verified Product Catalogue"
                     : "Grounded in verified catalogue data (Offline Rule Engine)"}
                 </p>
               </div>
