@@ -39,16 +39,15 @@ export function SommelierConcierge() {
   const [addedItemMap, setAddedItemMap] = useState<Record<string, boolean>>({});
   const [addingItemMap, setAddingItemMap] = useState<Record<string, boolean>>({});
   const [cartError, setCartError] = useState<string | null>(null);
-  const [activeProvider, setActiveProvider] = useState<"catalog_rule_engine" | "live_ai">("catalog_rule_engine");
+  const [activeProvider, setActiveProvider] = useState<"catalog_rule_engine" | "live_ai">("live_ai");
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const welcome = SommelierService.consult("");
     return [
       {
         id: "msg-welcome",
         sender: "sommelier",
-        text: welcome.reply,
-        suggestedProducts: welcome.suggestedProducts,
+        text: "Welcome to M/S Fruits & Nuts. I am your Royal Gourmet Sommelier, powered by Google Gemini AI and grounded strictly in our verified royal catalogue. I can guide you through our single-origin harvests — from high-altitude Kashmiri Mamra Almonds and Jumbo Medjool Dates to Himalayan Snow Walnuts and bespoke ceremonial gift boxes. How may I curate your experience today?",
+        suggestedProducts: SommelierService.consult("").suggestedProducts,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       },
     ];
