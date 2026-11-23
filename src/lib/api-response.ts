@@ -11,6 +11,8 @@ export interface ApiSuccessResponse<T> {
     limit?: number;
     total?: number;
     requestId?: string;
+    isGuest?: boolean;
+    [key: string]: unknown;
   };
 }
 

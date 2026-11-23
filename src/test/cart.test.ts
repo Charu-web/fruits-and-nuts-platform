@@ -216,6 +216,61 @@ async function runCartAndWishlistTests() {
 
   console.log("✅ Test 5 Passed: Quantity update PUT method alignment and guest calculation verified.");
 
+  // ----------------------------------------------------------------------
+  // Test 6: Guest-Safe Cart & Wishlist Route Contracts
+  // ----------------------------------------------------------------------
+  console.log("▶️ Test 6: Guest-Safe Cart & Wishlist Guard Contracts...");
+
+  const cartRouteSource = fs.readFileSync(
+    path.join(process.cwd(), "src/app/api/v1/cart/route.ts"),
+    "utf8"
+  );
+  assert.ok(
+    cartRouteSource.includes("getOptionalAuth"),
+    "Cart GET route must use getOptionalAuth to allow guest browsing without 401"
+  );
+  assert.ok(
+    cartRouteSource.includes("isGuest: true"),
+    "Cart GET route must return isGuest: true for unauthenticated visitors"
+  );
+  assert.ok(
+    cartRouteSource.includes("requireAuth"),
+    "Cart DELETE route must enforce requireAuth"
+  );
+
+  const wishlistRouteSource = fs.readFileSync(
+    path.join(process.cwd(), "src/app/api/v1/wishlist/items/route.ts"),
+    "utf8"
+  );
+  assert.ok(
+    wishlistRouteSource.includes("getOptionalAuth"),
+    "Wishlist GET route must use getOptionalAuth to allow guest browsing without 401"
+  );
+  assert.ok(
+    wishlistRouteSource.includes("requireAuth(req)"),
+    "Wishlist POST and DELETE routes must strictly enforce requireAuth"
+  );
+
+  console.log("✅ Test 6 Passed: Guest-safe GET contracts and protected mutations verified.");
+
+  // ----------------------------------------------------------------------
+  // Test 7: Royal Afghan Figs Asset Verification
+  // ----------------------------------------------------------------------
+  console.log("▶️ Test 7: Royal Afghan Figs Asset File & Header Verification...");
+
+  const figJpgPath = path.join(process.cwd(), "public/images/products/royal-afghan-figs.jpg");
+  assert.ok(fs.existsSync(figJpgPath), "royal-afghan-figs.jpg must exist in public/images/products/");
+  const figStats = fs.statSync(figJpgPath);
+  assert.ok(figStats.size > 10000, "royal-afghan-figs.jpg size must be substantial (>10KB)");
+
+  const figHeader = Buffer.alloc(2);
+  const fd = fs.openSync(figJpgPath, "r");
+  fs.readSync(fd, figHeader, 0, 2, 0);
+  fs.closeSync(fd);
+  assert.strictEqual(figHeader.toString("hex"), "ffd8", "royal-afghan-figs.jpg must have valid JPEG magic bytes (ffd8)");
+
+  console.log("✅ Test 7 Passed: Royal Afghan Figs branded asset exists with valid JPEG header.");
+
   console.log("\n🎉 All Phase 9D Cart & Wishlist Tests passed successfully!\n");
 }
 

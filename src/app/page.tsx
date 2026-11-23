@@ -119,14 +119,15 @@ const HOMEPAGE_CATEGORIES = [
     description: "Raw Chia, Roasted Flax, Himalayan Pumpkin",
     tag: "Purity Grade",
   },
-  {
-    name: "Mouth Fresheners",
-    slug: "mouth-fresheners",
-    href: "/category/mouth-fresheners",
-    image: "/images/products/shahi-paan-mukhwas.jpg",
-    description: "Heritage Shahi Paan, Seed Mukhwas",
-    tag: "100% Tobacco-Free",
-  },
+  // Temporarily hidden until Mouth Fresheners inventory is stocked
+  // {
+  //   name: "Mouth Fresheners",
+  //   slug: "mouth-fresheners",
+  //   href: "/category/mouth-fresheners",
+  //   image: "/images/products/shahi-paan-mukhwas.jpg",
+  //   description: "Heritage Shahi Paan, Seed Mukhwas",
+  //   tag: "100% Tobacco-Free",
+  // },
   {
     name: "Combos & Reserves",
     slug: "combos",

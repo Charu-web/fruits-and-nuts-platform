@@ -80,16 +80,17 @@ export function MegaMenu({ isOpen, onClose }: MegaMenuProps) {
         { name: "Organic Basil Seeds / Sabja", href: "/category/seeds" },
       ],
     },
-    {
-      title: "Mouth Fresheners",
-      href: "/category/mouth-fresheners",
-      badge: "100% Tobacco-Free",
-      items: [
-        { name: "Heritage Shahi Paan Confections", href: "/category/mouth-fresheners" },
-        { name: "Roasted Digestive Seeds Mukhwas", href: "/category/mouth-fresheners" },
-        { name: "Traditional Amla Digestives", href: "/category/mouth-fresheners" },
-      ],
-    },
+    // Temporarily hidden until Mouth Fresheners inventory is stocked
+    // {
+    //   title: "Mouth Fresheners",
+    //   href: "/category/mouth-fresheners",
+    //   badge: "100% Tobacco-Free",
+    //   items: [
+    //     { name: "Heritage Shahi Paan Confections", href: "/category/mouth-fresheners" },
+    //     { name: "Roasted Digestive Seeds Mukhwas", href: "/category/mouth-fresheners" },
+    //     { name: "Traditional Amla Digestives", href: "/category/mouth-fresheners" },
+    //   ],
+    // },
     {
       title: "Combos & Bundles",
       href: "/category/combos",

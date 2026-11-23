@@ -23,6 +23,23 @@ export async function requireAuth(request?: Request): Promise<SessionUser> {
 }
 
 /**
+ * Optional session retrieval.
+ * Returns the authenticated active SessionUser, or null if unauthenticated / inactive.
+ * Never throws 401/403.
+ */
+export async function getOptionalAuth(request?: Request): Promise<SessionUser | null> {
+  try {
+    const user = await getSessionUserFromRequest(request);
+    if (!user || !user.isActive) {
+      return null;
+    }
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Server-side guard requiring a valid session and specific role.
  * Throws AppError.forbidden (HTTP 403) if role is unauthorized.
  */

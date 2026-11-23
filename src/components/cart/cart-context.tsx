@@ -149,6 +149,34 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
+          // Guest visitor: restore local guest cart from localStorage
+          if (json.data.isGuest) {
+            if (typeof window !== "undefined") {
+              const stored = localStorage.getItem("fn_guest_cart_items");
+              const storedWrap = localStorage.getItem("fn_gift_wrap_enabled");
+              const storedMsg = localStorage.getItem("fn_gift_message");
+              const isWrap = storedWrap ? JSON.parse(storedWrap) : false;
+              if (stored) {
+                try {
+                  const parsed = JSON.parse(stored);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    const enriched = parsed.map((item: CartItemData) => ({
+                      ...item,
+                      imageUrl:
+                        (item.productSlug ? getProductImageUrl(item.productSlug) : null) ||
+                        item.imageUrl ||
+                        null,
+                    }));
+                    updateSummaryFromItems(enriched, null, isWrap, storedMsg);
+                    return;
+                  }
+                } catch {}
+              }
+              updateSummaryFromItems([], null, false, null);
+            }
+            return;
+          }
+
           const rawItems = json.data.items || [];
           const formattedItems: CartItemData[] = rawItems.map((item: any) => ({
             id: item.id,

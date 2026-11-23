@@ -102,7 +102,8 @@ export function Footer() {
               <li><Link href="/category/tea" className="hover:text-[#D4B679] transition-colors">Artisanal Estate Teas</Link></li>
               <li><Link href="/category/chocolates" className="hover:text-[#D4B679] transition-colors">Gourmet Belgian Chocolates</Link></li>
               <li><Link href="/category/seeds" className="hover:text-[#D4B679] transition-colors">Super Seeds & Berries</Link></li>
-              <li><Link href="/category/mouth-fresheners" className="hover:text-[#D4B679] transition-colors">Royal Mouth Fresheners (Mukhwas)</Link></li>
+              {/* Temporarily hidden until Mouth Fresheners inventory is stocked */}
+              {/* <li><Link href="/category/mouth-fresheners" className="hover:text-[#D4B679] transition-colors">Royal Mouth Fresheners (Mukhwas)</Link></li> */}
               <li><Link href="/gifting" className="hover:text-[#D4B679] transition-colors">Festive Gift Hampers</Link></li>
               <li><Link href="/build-your-own-box" className="hover:text-[#D4B679] transition-colors text-[#D4B679] font-bold">✨ Build Your Own Box (BYOB)</Link></li>
             </ul>

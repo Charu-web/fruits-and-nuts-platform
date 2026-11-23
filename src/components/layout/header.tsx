@@ -27,7 +27,8 @@ const MAIN_NAV_ITEMS = [
   { label: "Tea", href: "/category/tea" },
   { label: "Chocolates", href: "/category/chocolates" },
   { label: "Seeds", href: "/category/seeds" },
-  { label: "Mouth Fresheners", href: "/category/mouth-fresheners" },
+  // Temporarily hidden until Mouth Fresheners inventory is stocked
+  // { label: "Mouth Fresheners", href: "/category/mouth-fresheners" },
   { label: "Combos & Gift Packs", href: "/category/combos" },
   { label: "Gift Finder", href: "/gifting" },
   { label: "Our Stores", href: "/stores" },
@@ -47,6 +48,20 @@ export function Header() {
         const res = await fetch("/api/v1/wishlist/items", { cache: "no-store" }).catch(() => null);
         if (res && res.ok) {
           const json = await res.json();
+          if (json.meta?.isGuest || json.data?.isGuest) {
+            const saved = localStorage.getItem("fn_wishlist");
+            if (saved) {
+              try {
+                const list: string[] = JSON.parse(saved);
+                setWishlistCount(Array.isArray(list) ? list.length : 0);
+              } catch {
+                setWishlistCount(0);
+              }
+            } else {
+              setWishlistCount(0);
+            }
+            return;
+          }
           const items = Array.isArray(json.data) ? json.data : (json.data?.items || []);
           setWishlistCount(items.length);
           try {

@@ -58,50 +58,52 @@ export default function WishlistPage() {
       const res = await fetch("/api/v1/wishlist/items", { cache: "no-store" }).catch(() => null);
 
       if (res && res.ok) {
-        setIsAuthenticated(true);
         const json = await res.json();
-        const serverItems: WishlistProduct[] = Array.isArray(json.data) ? json.data : (json.data?.items || []);
+        if (!json.meta?.isGuest && !json.data?.isGuest) {
+          setIsAuthenticated(true);
+          const serverItems: WishlistProduct[] = Array.isArray(json.data) ? json.data : (json.data?.items || []);
 
-        // Migrate any unauthenticated local items to server
-        try {
-          const localSaved = localStorage.getItem("fn_wishlist");
-          if (localSaved) {
-            const localList: string[] = JSON.parse(localSaved);
-            if (Array.isArray(localList) && localList.length > 0) {
-              const serverSlugs = new Set(serverItems.map((i) => i.slug));
-              const serverVariantIds = new Set(serverItems.map((i) => i.variantId));
-              const unsynced = localList.filter((s) => !serverSlugs.has(s) && !serverVariantIds.has(s));
+          // Migrate any unauthenticated local items to server
+          try {
+            const localSaved = localStorage.getItem("fn_wishlist");
+            if (localSaved) {
+              const localList: string[] = JSON.parse(localSaved);
+              if (Array.isArray(localList) && localList.length > 0) {
+                const serverSlugs = new Set(serverItems.map((i) => i.slug));
+                const serverVariantIds = new Set(serverItems.map((i) => i.variantId));
+                const unsynced = localList.filter((s) => !serverSlugs.has(s) && !serverVariantIds.has(s));
 
-              if (unsynced.length > 0) {
-                for (const slugOrId of unsynced) {
-                  await fetch("/api/v1/wishlist/items", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ variantId: slugOrId, slug: slugOrId }),
-                  }).catch(() => null);
-                }
+                if (unsynced.length > 0) {
+                  for (const slugOrId of unsynced) {
+                    await fetch("/api/v1/wishlist/items", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ variantId: slugOrId, slug: slugOrId }),
+                    }).catch(() => null);
+                  }
 
-                // Re-fetch authoritative items after sync
-                const reRes = await fetch("/api/v1/wishlist/items", { cache: "no-store" });
-                if (reRes.ok) {
-                  const reJson = await reRes.json();
-                  const updatedList: WishlistProduct[] = Array.isArray(reJson.data) ? reJson.data : (reJson.data?.items || []);
-                  setItems(updatedList);
-                  try {
-                    localStorage.setItem("fn_wishlist", JSON.stringify(updatedList.map((i) => i.slug)));
-                  } catch {}
-                  return;
+                  // Re-fetch authoritative items after sync
+                  const reRes = await fetch("/api/v1/wishlist/items", { cache: "no-store" });
+                  if (reRes.ok) {
+                    const reJson = await reRes.json();
+                    const updatedList: WishlistProduct[] = Array.isArray(reJson.data) ? reJson.data : (reJson.data?.items || []);
+                    setItems(updatedList);
+                    try {
+                      localStorage.setItem("fn_wishlist", JSON.stringify(updatedList.map((i) => i.slug)));
+                    } catch {}
+                    return;
+                  }
                 }
               }
             }
-          }
-        } catch {}
+          } catch {}
 
-        setItems(serverItems);
-        try {
-          localStorage.setItem("fn_wishlist", JSON.stringify(serverItems.map((i) => i.slug)));
-        } catch {}
-        return;
+          setItems(serverItems);
+          try {
+            localStorage.setItem("fn_wishlist", JSON.stringify(serverItems.map((i) => i.slug)));
+          } catch {}
+          return;
+        }
       }
 
       // 2. Unauthenticated / Guest fallback mode
